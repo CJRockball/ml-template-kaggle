@@ -1,0 +1,5 @@
+schema_version: 1
+scoring_batch_id: score_20261020_144151_eac2f87783b2
+name: smoke_test_reference
+approved_population: "Software integration test only; not an approved production baseline"
+numeric_bins: 10

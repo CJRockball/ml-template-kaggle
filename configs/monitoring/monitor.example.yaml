@@ -1,0 +1,15 @@
+schema_version: 1
+scoring_batch_id: score_REPLACE_WITH_BATCH
+reference_id: ref_REPLACE_WITH_REFERENCE
+label_import_id: null
+as_of: "2026-10-21T09:00:00+08:00"
+min_rows: 200
+min_labelled: 100
+min_positives: 10
+min_negatives: 10
+# Illustrative review threshold, not a universal significance cutoff.
+js_warning: 0.1
+min_label_coverage: 0.9
+brier_warning: null
+recall_floor: null
+quality_ranges: {}

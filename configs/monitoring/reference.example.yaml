@@ -1,0 +1,5 @@
+schema_version: 1
+scoring_batch_id: score_REPLACE_WITH_APPROVED_BATCH
+name: initial_accepted_population
+approved_population: "REPLACE: why this complete batch represents acceptable operation"
+numeric_bins: 10

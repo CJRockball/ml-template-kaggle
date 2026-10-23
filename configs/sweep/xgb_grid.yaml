@@ -1,0 +1,8 @@
+# 3 x 2 x 2 = 12 runs. One launch = one experiment_run_id (assigned by the runner).
+# Check it first:  python -m ml_template.training.run_config --sweep configs/sweep/xgb_grid.yaml
+base: configs/experiment/xgb_baseline.yaml
+experiment_name: xgb_depth_lr_grid
+grid:
+  model.params.max_depth: [3, 5, 7]
+  model.params.learning_rate: [0.03, 0.1]
+  model.params.scale_pos_weight: [auto, 10]

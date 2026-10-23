@@ -1,0 +1,34 @@
+# Preflight with --check. Freeze settings before --execute.
+schema_version: 1
+parent_run_id: run_20261016_121745_958bec
+calibration_id: cal_20261017_063551_260e14
+release_variant: calibrated
+expected_silver_dataset_version_id: silver_ds_v1_eaa07364
+expected_feature_set_id: fs_d0383e096267
+expected_split_id: split_83dae5419403
+intended_use: "AI4I machine-failure research, not automatic deployment approval"
+limitations:
+  - "Benchmark evidence does not establish performance on future production batches."
+primary_metric: pr_auc
+policy:
+  kind: none
+  source: "Operational action has not yet been selected."
+  batch_definition: "entire evaluation holdout"
+uncertainty:
+  enabled: true
+  repetitions: 1000
+  confidence: 0.95
+  seed: 42
+  sampling_unit: independent_row
+alert_rates: [0.05, 0.10]
+reliability_bins: 5
+slices:
+  - column: type
+    values: [L, M, H]
+min_slice_rows: 30
+min_slice_positives: 10
+error_sample_size: 25
+criteria: []
+acknowledge_prior_exposure: true
+prior_exposure_note: “Earlier runs on this dataset have recorded holdout evaluations. This report is a reassessment, not untouched first confirmation; exact overlap and influence on model selection have not been established.”
+# Remove type slice before freezing if type is not a saved model-input feature.

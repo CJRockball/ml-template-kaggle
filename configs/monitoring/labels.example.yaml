@@ -1,0 +1,7 @@
+schema_version: 1
+scoring_batch_id: score_REPLACE_WITH_BATCH
+input_path: data/labels/complete_outcome_snapshot.csv
+source: "REPLACE: outcome collection system"
+outcome_definition: "REPLACE: binary event and prediction horizon"
+sampling: all_rows
+supersedes_label_import_id: null

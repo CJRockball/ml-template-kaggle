@@ -1,0 +1,33 @@
+# Baseline: Silver feature-role columns only, no engineering.
+schema_version: 2
+experiment_name: xgb_baseline
+seed: 42  # model seed; vary this for repeat runs, the split stays fixed
+
+data:
+  dataset_name: ai4i  # folder under data/silver/
+  dataset_config: configs/ai4i_binary.yaml  # supplies key, target and roles
+  silver_dataset_version_id: silver_ds_v1_eaa07364
+  feature_set_id: null  # null = Silver feature columns as they are
+
+split:
+  method: stratified
+  holdout_fraction: 0.2
+  n_folds: 5
+  seed: 42  # change only to create a new split
+
+training:
+  validation_fraction: 0.2  # of each fold's training rows, used only to stop early
+  refit_rounds_factor: 1.0  # final rounds = median best round x this
+
+metrics:
+  primary: pr_auc  # a result key: pr_auc, or e.g. recall_at_5pct
+  names: []  # extras only; pr_auc, roc_auc, brier, recall and precision always run
+  alert_rates: []  # extras only; 5% and 10% always run
+
+analysis:  # standard per-run analyses; not part of the config hash
+  permutation_importance: true
+  permutation_repeats: 10
+  permutation_max_rows: 50000  # validation rows per fold
+  error_sample_size: 25  # misses and false alarms listed in error_sample.csv; 0 = off
+
+model_file: configs/model/xgb.yaml

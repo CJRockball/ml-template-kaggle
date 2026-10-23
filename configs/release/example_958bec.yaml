@@ -1,0 +1,10 @@
+# Set an explicit successful evaluation ID from your local final_evaluations table.
+# Its saved policy and score variant are used unchanged; no threshold search here.
+schema_version: 1
+name: ai4i_958bec_research
+evaluation_id: eval_20261018_080234_3d7f1647
+parent_run_id: run_20261016_121745_958bec
+calibration_id: cal_20261017_063551_260e14
+intended_use: AI4I research batch scoring; not automatic deployment approval
+acknowledge_research_release: true
+parity_atol: 0.0000001

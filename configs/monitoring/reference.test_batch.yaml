@@ -1,0 +1,5 @@
+schema_version: 1
+scoring_batch_id: score_20261019_140538_dcde1aa017a8
+name: test_batch_monitor
+approved_population: "Trying the 24 sample test batch"
+numeric_bins: 10

@@ -1,0 +1,7 @@
+schema_version: 1
+parent_run_id: run_20261016_121745_958bec
+method: sigmoid
+epsilon: 0.0000001
+l2: 0.000001
+reliability_bins: 5
+min_class_count: 10

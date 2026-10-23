@@ -1,0 +1,26 @@
+# Backend only. Paths are resolved against the repository root, not this YAML folder.
+# Replace IDs and paths from your saved release/scoring artifacts. No automatic latest selection.
+schema_version: 1
+release_dir: /home/python_user/coding/ds/tabular-ml-template/artifacts/releases/rel_8cc0696526ac17e18606cc09
+scoring_dir: /home/python_user/coding/ds/tabular-ml-template/artifacts/scores/score_20261019_140538_dcde1aa017a8
+expected_release_id: rel_8cc0696526ac17e18606cc09
+expected_scoring_batch_id: score_20261019_140538_dcde1aa017a8
+
+# A separate, trusted environment whose installed ml_template matches runtime.json EXACTLY.
+# Preserve this virtualenv Python path; do not replace it with its symlink's system target.
+runtime_python: /home/python_user/coding/ds/tabular-ml-template-pinned/.venv/bin/python
+runtime_source_root: /home/python_user/coding/ds/tabular-ml-template-pinned/src/ml_template
+
+registry_path: data/project.db
+output_root: artifacts/explanations
+chunk_size: 256
+max_rows: 100000
+timeout_seconds: 600
+# Required for an alert_rate policy: exact policy.batch_definition from release.json.
+batch_definition: null
+# Optional exact non-overlapping partition of ALL final estimator features.
+groups: {}
+margin_atol: 0.00001
+margin_rtol: 0.00001
+probability_atol: 0.000001
+probability_rtol: 0.00001
