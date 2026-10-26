@@ -59,8 +59,6 @@ def test_no_model_training_or_training_dashboard_imports():
     tree = ast.parse(Path(module.__file__).read_text())
     imports = [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module]
     assert not any(
-
-            name.startswith(("ml_template.models", "ml_template.training", "ml_template.dashboard"))
-            for name in imports
-
+        name.startswith(("ml_template.models", "ml_template.training", "ml_template.dashboard"))
+        for name in imports
     )

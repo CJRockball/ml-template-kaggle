@@ -3,6 +3,7 @@
 Run from the project root. Reads verified scoring artifacts; no model loading, database writes,
 scoring, label generation or source changes. Outputs are new synthetic SOFTWARE TEST inputs.
 """
+
 import argparse
 import json
 import shutil
@@ -68,21 +69,33 @@ def main(argv=None):
     torque["torque_nm"] = pd.Series(values, index=torque.index).astype(dtype)
     category = control.copy(deep=True)
     if isinstance(category["type"].dtype, pd.CategoricalDtype):
-        category["type"] = pd.Categorical(["H"] * len(category), categories=category["type"].cat.categories, ordered=category["type"].cat.ordered)
+        category["type"] = pd.Categorical(
+            ["H"] * len(category),
+            categories=category["type"].cat.categories,
+            ordered=category["type"].cat.ordered,
+        )
     else:
-        category["type"] = pd.Series(["H"] * len(category), index=category.index, dtype=control["type"].dtype)
+        category["type"] = pd.Series(
+            ["H"] * len(category), index=category.index, dtype=control["type"].dtype
+        )
     scenarios = {"control": control, "torque_shift": torque, "type_shift": category}
     expectations = {}
     for name, frame in scenarios.items():
         validate_batch(frame, batch.contract)
         measurements = {}
         for feature in ("torque_nm", "type"):
-            measurements[feature] = compare(frame[feature], reference["profiles"][f"input:{feature}"])["js_divergence"]
+            measurements[feature] = compare(
+                frame[feature], reference["profiles"][f"input:{feature}"]
+            )["js_divergence"]
         expectations[name] = {"n_rows": len(frame), "input_js_divergence": measurements}
     if expectations["torque_shift"]["input_js_divergence"]["torque_nm"] < 0.1:
-        raise ValueError("chosen torque shift is too weak for the default 0.1 warning threshold; increase --torque-increase")
+        raise ValueError(
+            "chosen torque shift is too weak for the default 0.1 warning threshold; increase --torque-increase"
+        )
     if expectations["type_shift"]["input_js_divergence"]["type"] < 0.1:
-        raise ValueError("all-H scenario is too similar to this reference for the default warning threshold")
+        raise ValueError(
+            "all-H scenario is too similar to this reference for the default warning threshold"
+        )
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".monitoring-scenarios-", dir=destination.parent))
@@ -94,31 +107,66 @@ def main(argv=None):
             loaded = pd.read_parquet(path)
             validate_batch(loaded, batch.contract)
             pd.testing.assert_frame_equal(frame, loaded)
-            config = MonitorConfig(scoring_batch_id=f"REPLACE_WITH_NEW_{name.upper()}_SCORING_BATCH_ID", reference_id=args.reference_id,
-                                  label_import_id=None, as_of=stamp).model_dump(mode="json")
-            (staging / f"monitor_{name}.yaml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-            metadata = {"schema_version": 1, "source_system": "synthetic_monitoring_software_test",
-                        "business_batch_id": f"monitoring_test_{name}", "observation_start": None, "observation_end": None}
-            (staging / f"metadata_{name}.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-        provenance = {"schema_version": 1, "purpose": "synthetic monitoring SOFTWARE TEST, not prospective or performance evidence",
-                      "reference_id": args.reference_id, "source_scoring_batch_id": batch.batch_id, "release_id": batch.release_id,
-                      "created_at": stamp, "source_artifact_hashes": batch.artifact_hashes,
-                      "keys": "original keys retained; unique within each batch; scenarios are dependent copies, not new independent observations",
-                      "changes": {"control": "no changes", "torque_shift": f"torque_nm + {args.torque_increase} for every row; all other columns unchanged",
-                                  "type_shift": "type set to H for every row; all other columns unchanged"},
-                      "labels": "none: do NOT attach original holdout labels to modified scenarios",
-                      "expected_input_measurements": expectations,
-                      "output_hashes": {f"{name}.parquet": digest(staging / f"{name}.parquet") for name in scenarios}}
-        (staging / "scenario_manifest.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+            config = MonitorConfig(
+                scoring_batch_id=f"REPLACE_WITH_NEW_{name.upper()}_SCORING_BATCH_ID",
+                reference_id=args.reference_id,
+                label_import_id=None,
+                as_of=stamp,
+            ).model_dump(mode="json")
+            (staging / f"monitor_{name}.yaml").write_text(
+                yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+            )
+            metadata = {
+                "schema_version": 1,
+                "source_system": "synthetic_monitoring_software_test",
+                "business_batch_id": f"monitoring_test_{name}",
+                "observation_start": None,
+                "observation_end": None,
+            }
+            (staging / f"metadata_{name}.json").write_text(
+                json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+            )
+        provenance = {
+            "schema_version": 1,
+            "purpose": "synthetic monitoring SOFTWARE TEST, not prospective or performance evidence",
+            "reference_id": args.reference_id,
+            "source_scoring_batch_id": batch.batch_id,
+            "release_id": batch.release_id,
+            "created_at": stamp,
+            "source_artifact_hashes": batch.artifact_hashes,
+            "keys": "original keys retained; unique within each batch; scenarios are dependent copies, not new independent observations",
+            "changes": {
+                "control": "no changes",
+                "torque_shift": f"torque_nm + {args.torque_increase} for every row; all other columns unchanged",
+                "type_shift": "type set to H for every row; all other columns unchanged",
+            },
+            "labels": "none: do NOT attach original holdout labels to modified scenarios",
+            "expected_input_measurements": expectations,
+            "output_hashes": {
+                f"{name}.parquet": digest(staging / f"{name}.parquet") for name in scenarios
+            },
+        }
+        (staging / "scenario_manifest.json").write_text(
+            json.dumps(provenance, indent=2) + "\n", encoding="utf-8"
+        )
         if destination.exists():
             raise ValueError("output appeared during generation; refusing to overwrite")
         staging.rename(destination)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    print(json.dumps({"output": str(destination), "release_id": batch.release_id, "reference_id": args.reference_id,
-                      "expected_input_measurements": expectations,
-                      "next": "Score control and shifted files with the SAME existing release in the pinned runtime; insert returned scoring IDs into the corresponding monitor YAMLs; monitor against the SAME frozen reference."}, indent=2))
+    print(
+        json.dumps(
+            {
+                "output": str(destination),
+                "release_id": batch.release_id,
+                "reference_id": args.reference_id,
+                "expected_input_measurements": expectations,
+                "next": "Score control and shifted files with the SAME existing release in the pinned runtime; insert returned scoring IDs into the corresponding monitor YAMLs; monitor against the SAME frozen reference.",
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -70,7 +70,7 @@ def load_and_canonicalize(
 
     df[target] = labels.map(mapping)
     df = df.astype(canonical_dtypes)
-    
+
     assert df[target].dtype == "int8"
     assert df[target].isin([0, 1]).all()
     print(df[target].value_counts(dropna=False))
@@ -158,11 +158,7 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
             continue
 
         values = df[col].dropna()
-        unexpected = (
-            values.loc[~values.isin(allowed_categories)]
-            .unique()
-            .tolist()
-        )
+        unexpected = values.loc[~values.isin(allowed_categories)].unique().tolist()
 
         add(
             f"allowed_values:{col}",
@@ -170,9 +166,27 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
             f"unexpected={unexpected}",
         )
 
-    if "id" in df.columns:
-        dup_id = int(df["id"].duplicated().sum())
-        add("id_unique", dup_id == 0, f"duplicates={dup_id}")
+    raw_key = config.get("data", {}).get("entity_id")
+    key = contract["canonical_names"].get(raw_key, raw_key) if raw_key else None
+    if key is None:
+        key = next(iter(roles.get("id", [])), None)
+    add("entity_key_configured", key is not None, f"key={key!r}")
+    if key is not None:
+        exists = key in df.columns
+        add("entity_key_exists", exists, f"key={key!r}")
+        add("entity_key_in_id_role", key in roles.get("id", []), f"key={key!r}")
+        if exists:
+            nulls = int(df[key].isna().sum())
+            add("entity_key_non_null", nulls == 0, f"key={key!r}, nulls={nulls}")
+            if config.get("validation", {}).get("require_unique_entity_id", True):
+                duplicates = int(df[key].duplicated().sum())
+                add("id_unique", duplicates == 0, f"key={key!r}, duplicates={duplicates}")
+    for target_col in roles.get("target", []):
+        exists = target_col in df.columns
+        add(f"target_exists:{target_col}", exists, f"column={target_col!r}")
+        if exists:
+            nulls = int(df[target_col].isna().sum())
+            add(f"target_non_null:{target_col}", nulls == 0, f"nulls={nulls}")
 
     source_cols = [c for c in df.columns if c not in {"dataset_version_id", "source_row_number"}]
     dup_rows = int(df.duplicated(subset=source_cols).sum())
