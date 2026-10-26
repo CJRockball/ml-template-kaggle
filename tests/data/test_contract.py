@@ -1,7 +1,6 @@
 import pytest
 
 from ml_template.data.contract import load_dataset_contract
-from ml_template.paths import CONFIGS
 
 TOP = """
 data:
@@ -79,12 +78,3 @@ def test_single_target_only(tmp_path):
 def test_target_mismatch_rejected(tmp_path):
     with pytest.raises(ValueError, match="disagrees"):
         load_dataset_contract(_write(tmp_path, TOP.replace("target: Y\nroles", "target: A\nroles")))
-
-
-def test_real_ai4i_contract():
-    c = load_dataset_contract(CONFIGS / "ai4i_binary.yaml")
-    assert c.entity_id == "udi"
-    assert c.target == "machine_failure"
-    assert "type" in c.features and len(c.features) == 6
-    assert not set(c.features) & set(c.excluded_from_features)
-    assert not any(name in c.features for name in ("twf", "hdf", "pwf", "osf", "rnf"))

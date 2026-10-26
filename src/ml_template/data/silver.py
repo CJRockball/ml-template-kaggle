@@ -26,7 +26,6 @@ from ml_template.tracking.pipeline_logging import setup_logging
 logger = logging.getLogger("ml_template.scripts.silver")
 
 TEXT_DTYPES = {"object", "category", "string"}
-ALLOWED_TYPE = {"L", "M", "H"}
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -47,9 +46,34 @@ def load_and_canonicalize(
     engine = get_engine()
     df = extract_bronze(dataset_version_id=dataset_version_id, engine=engine)
 
-    canonical_names = data_config["silver_eda_contract"]["canonical_names"]
-    canonical_dtypes = data_config["silver_eda_contract"]["canonical_dtypes"]
-    df = df.rename(columns=canonical_names).astype(canonical_dtypes)
+    contract = data_config["silver_eda_contract"]
+    canonical_names = contract["canonical_names"]
+    canonical_dtypes = contract["canonical_dtypes"]
+
+    df = df.rename(columns=canonical_names)
+
+    raw_targets = data_config["bronze_source_contract"]["roles"]["target"]
+    if len(raw_targets) != 1:
+        raise ValueError("Expected exactly one target column")
+
+    target = canonical_names.get(raw_targets[0], raw_targets[0])
+    mapping = contract["value_mappings"][target]
+
+    labels = df[target]
+
+    if labels.isna().any():
+        raise ValueError(f"{target}: missing target labels are not allowed")
+
+    unexpected = labels.loc[~labels.isin(list(mapping))].unique().tolist()
+    if unexpected:
+        raise ValueError(f"{target}: unexpected raw labels {unexpected}")
+
+    df[target] = labels.map(mapping)
+    df = df.astype(canonical_dtypes)
+
+    assert df[target].dtype == "int8"
+    assert df[target].isin([0, 1]).all()
+    print(df[target].value_counts(dropna=False))
 
     roles = data_config["bronze_source_contract"]["roles"]
     role_map = {
@@ -80,7 +104,7 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
     names = list(contract["canonical_names"].values())
     dtypes = contract["canonical_dtypes"]
     expected_rows = int(config["bronze_source_contract"]["rows"])
-    binary_cols = list(roles["target"]) + list(roles["outcome"])
+    binary_cols = list(roles["target"])
 
     results: list[dict] = []
 
@@ -93,9 +117,21 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
     add("expected_columns", not missing, f"missing={missing}")
 
     present = [c for c in names if c in df.columns]
-    null_counts = df[present].isna().sum()
-    null_counts = null_counts[null_counts > 0].to_dict()
-    add("no_new_nulls_after_cast", not null_counts, f"nulls={null_counts}")
+    policy = contract.get("missingness", {})
+    default_limit = float(policy.get("default_max_rate", 0.0))
+    limits = policy.get("max_rate_by_column", {})
+
+    for col in present:
+        limit = float(limits.get(col, default_limit))
+        if not 0.0 <= limit <= 1.0:
+            raise ValueError(f"{col}: missing-rate limit must be in [0, 1]")
+
+        missing_rate = float(df[col].isna().mean())
+        add(
+            f"missing_rate:{col}",
+            missing_rate <= limit,
+            f"observed={missing_rate:.6f}, maximum={limit:.6f}",
+        )
 
     bad_dtypes = {
         c: {"expected": dtypes[c], "observed": str(df[c].dtype)}
@@ -110,13 +146,47 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
     bad_binary = {c: v for c, v in bad_binary.items() if v}
     add("binary_fields_in_0_1", not bad_binary, f"violations={bad_binary}")
 
-    if "type" in df.columns:
-        bad_type = sorted(set(df["type"].dropna().astype(str)) - ALLOWED_TYPE)
-        add("type_in_L_M_H", not bad_type, f"unexpected={bad_type}")
+    allowed_values = contract.get("allowed_values", {})
 
-    if "udi" in df.columns:
-        dup_udi = int(df["udi"].duplicated().sum())
-        add("udi_unique", dup_udi == 0, f"duplicates={dup_udi}")
+    for col, allowed_categories in allowed_values.items():
+        if col not in df.columns:
+            add(
+                f"allowed_values:{col}",
+                False,
+                "configured column is missing",
+            )
+            continue
+
+        values = df[col].dropna()
+        unexpected = values.loc[~values.isin(allowed_categories)].unique().tolist()
+
+        add(
+            f"allowed_values:{col}",
+            not unexpected,
+            f"unexpected={unexpected}",
+        )
+
+    raw_key = config.get("data", {}).get("entity_id")
+    key = contract["canonical_names"].get(raw_key, raw_key) if raw_key else None
+    if key is None:
+        key = next(iter(roles.get("id", [])), None)
+    add("entity_key_configured", key is not None, f"key={key!r}")
+    if key is not None:
+        exists = key in df.columns
+        add("entity_key_exists", exists, f"key={key!r}")
+        add("entity_key_in_id_role", key in roles.get("id", []), f"key={key!r}")
+        if exists:
+            nulls = int(df[key].isna().sum())
+            add("entity_key_non_null", nulls == 0, f"key={key!r}, nulls={nulls}")
+            if config.get("validation", {}).get("require_unique_entity_id", True):
+                duplicates = int(df[key].duplicated().sum())
+                add("id_unique", duplicates == 0, f"key={key!r}, duplicates={duplicates}")
+    for target_col in roles.get("target", []):
+        exists = target_col in df.columns
+        add(f"target_exists:{target_col}", exists, f"column={target_col!r}")
+        if exists:
+            nulls = int(df[target_col].isna().sum())
+            add(f"target_non_null:{target_col}", nulls == 0, f"nulls={nulls}")
 
     source_cols = [c for c in df.columns if c not in {"dataset_version_id", "source_row_number"}]
     dup_rows = int(df.duplicated(subset=source_cols).sum())
@@ -125,32 +195,10 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
     return results
 
 
-def report_label_inconsistencies(df: pd.DataFrame, roles: dict) -> dict:
-    """Report only. Rows are never altered, flagged in the data, or dropped."""
-    target = roles["target"][0]
-    modes = list(roles["outcome"])
-    mode_sum = df[modes].sum(axis=1)
-
-    failure_no_mode = (df[target] == 1) & (mode_sum == 0)
-    mode_no_failure = (df[target] == 0) & (mode_sum > 0)
-    compound = mode_sum >= 2
-
-    def summarize(mask: pd.Series) -> dict:
-        ids = df.loc[mask, "source_row_number"].astype(int).tolist()
-        return {"count": int(mask.sum()), "source_row_numbers": ids}
-
-    return {
-        "failure_without_mode": summarize(failure_no_mode),
-        "mode_without_failure": summarize(mode_no_failure),
-        "compound_modes": summarize(compound),
-    }
-
-
 def write_outputs(
     df: pd.DataFrame,
     roles: dict,
     gates: list[dict],
-    labels: dict,
     *,
     dataset_name: str,
     dataset_version_id: str,
@@ -171,7 +219,6 @@ def write_outputs(
         "validated_at": datetime.now(UTC).isoformat(),
         "passed": passed,
         "gates": gates,
-        "label_inconsistencies": labels,
     }
     (quality_dir / "validation.json").write_text(json.dumps(validation, indent=2))
 
@@ -225,13 +272,11 @@ def main(argv: list[str] | None = None) -> int:
 
     df, roles = build_silver(args.dataset_version_id, config)
     gates = check_gates(df, roles, config)
-    labels = report_label_inconsistencies(df, roles)
 
     exit_code = write_outputs(
         df,
         roles,
         gates,
-        labels,
         dataset_name=args.dataset_name,
         dataset_version_id=args.dataset_version_id,
         config_path=config_path,

@@ -1,0 +1,220 @@
+# Bronze dataset configuration and contract
+project:
+  name: kaggle_s6e10_airline
+  description: Kaggle competition on binary label airline satisfactions. And template building
+
+data_paths:
+  database: data/project.db
+  raw_data: data/raw
+  processed_data: data/processed
+  artifacts: artifacts
+  logs: logs
+
+data:
+  adapter: None
+  source: data/raw/combined.csv
+  format: csv
+  entity_id: id
+  target: satisfaction
+  task: binary_classification
+  positive_label: True
+
+# Minimal technical & structural contract for Bronze ingestion
+bronze_source_contract:
+  rows: 829515
+  columns: 24
+  col_names:
+    - "id"
+    - "Age" 
+    - "Flight Distance" 
+    - "Inflight wifi service"
+    - "Departure/Arrival time convenient" 
+    - "Ease of Online booking"
+    - "Gate location" 
+    - "Food and drink" 
+    - "Online boarding" 
+    - "Seat comfort"
+    - "Inflight entertainment" 
+    - "On-board service" 
+    - "Leg room service"
+    - "Baggage handling" 
+    - "Checkin service" 
+    - "Cleanliness"
+    - "Departure Delay in Minutes" 
+    - "Arrival Delay in Minutes" 
+    - "Gender"
+    - "Customer Type" 
+    - "Type of Travel" 
+    - "Class" 
+    - "satisfaction"
+    - "data_type"
+
+  # Semantic column role classification for column_registry
+  roles:
+    id: ["id"]
+    feature:
+      - "Age" 
+      - "Flight Distance" 
+      - "Inflight wifi service"
+      - "Departure/Arrival time convenient" 
+      - "Ease of Online booking"
+      - "Gate location" 
+      - "Food and drink" 
+      - "Online boarding" 
+      - "Seat comfort"
+      - "Inflight entertainment" 
+      - "On-board service" 
+      - "Leg room service"
+      - "Baggage handling" 
+      - "Checkin service" 
+      - "Cleanliness"
+      - "Departure Delay in Minutes" 
+      - "Arrival Delay in Minutes" 
+      - "Gender"
+      - "Customer Type" 
+      - "Type of Travel" 
+      - "Class" 
+    target: ["satisfaction"]
+
+# Business-level validation (enforced downstream in Silver / EDA)
+validation:
+  required_columns:
+    - "id"
+    - "Age" 
+    - "Flight Distance" 
+    - "Inflight wifi service"
+    - "Departure/Arrival time convenient" 
+    - "Ease of Online booking"
+    - "Gate location" 
+    - "Food and drink" 
+    - "Online boarding" 
+    - "Seat comfort"
+    - "Inflight entertainment" 
+    - "On-board service" 
+    - "Leg room service"
+    - "Baggage handling" 
+    - "Checkin service" 
+    - "Cleanliness"
+    - "Departure Delay in Minutes" 
+    - "Arrival Delay in Minutes" 
+    - "Gender"
+    - "Customer Type" 
+    - "Type of Travel" 
+    - "Class" 
+    - "satisfaction"
+    - "data_type"
+  allowed_target_values: [False, True]
+  require_unique_entity_id: true
+  max_missing_rate: 0.1
+
+# silver contract from eda
+silver_eda_contract:
+  canonical_names:
+    "id": "id"
+    "Age": "age"
+    "Flight Distance": "flight_distance" 
+    "Inflight wifi service": "wifi"
+    "Departure/Arrival time convenient": "convenient_timing" 
+    "Ease of Online booking": "ease_of_booking_online"
+    "Gate location": "gate_location"
+    "Food and drink": "food_and_drink"
+    "Online boarding": "online_boarding"
+    "Seat comfort": "seat_comfort"
+    "Inflight entertainment": "inflight_entertainment"
+    "On-board service": "on_board_service"
+    "Leg room service": "leg_room_service"
+    "Baggage handling": "bagage_handling"
+    "Checkin service": "check_in_service"
+    "Cleanliness": "cleanliness"
+    "Departure Delay in Minutes": "departure_delay" 
+    "Arrival Delay in Minutes": "arrival_delay"
+    "Gender": "gender"
+    "Customer Type": "customer_type"
+    "Type of Travel": "type_of_travel"
+    "Class": "class"
+    "satisfaction": "satisfaction"
+    "data_type": "data_type"
+
+  canonical_dtypes:
+    "id": Int64
+    "age": Int32
+    "flight_distance": Int64 
+    "wifi": Int16
+    "convenient_timing": Int16 
+    "ease_of_booking_online": int16
+    "gate_location": Int16
+    "food_and_drink": Int16
+    "online_boarding": Int16
+    "seat_comfort": Int16
+    "inflight_entertainment": Int16
+    "on_board_service": Int16
+    "leg_room_service": Int16
+    "bagage_handling": Int16
+    "check_in_service": Int16
+    "cleanliness": Int16
+    "departure_delay": Int64
+    "arrival_delay": Int64
+    "gender": string
+    "customer_type": string
+    "type_of_travel": string
+    "class": string
+    "satisfaction": int8
+    "data_type": string
+
+  feature_types:
+    numerical:
+      - age
+      - flight_distance
+      - departure_delay
+      - arrival_delay
+
+    nominal:
+      - gender
+      - customer_type
+      - type_of_travel
+      - class
+
+    ordinal:
+      - wifi
+      - convenient_timing
+      - ease_of_booking_online
+      - gate_location
+      - food_and_drink
+      - online_boarding
+      - seat_comfort
+      - inflight_entertainment
+      - on_board_service
+      - leg_room_service
+      - bagage_handling
+      - check_in_service
+      - cleanliness
+
+  allowed_values:
+    gender: ['Female', 'Male']
+    customer_type: ['Loyal Customer', 'disloyal Customer']
+    type_of_travel: ['Personal Travel', 'Business travel']
+    class: ['Eco', 'Business', 'Eco Plus']
+    wifi: [4, 5, 3, 1, 2, 0]
+    convenient_timing: [4, 5, 3, 2, 0, 1]
+    ease_of_booking_online: [4, 5, 2, 3, 1, 0]
+    gate_location: [3, 5, 4, 2, 1, 0]
+    food_and_drink: [1, 5, 3, 4, 2, 0]
+    online_boarding: [4, 3, 2, 1, 5, 0]
+    seat_comfort: [1, 4, 3, 5, 2, 0]
+    inflight_entertainment: [1, 5, 3, 4, 2, 0]
+    on_board_service: [3, 5, 4, 2, 1, 0]
+    leg_room_service: [4, 5, 3, 0, 1, 2]
+    bagage_handling: [4, 5, 3, 2, 1]
+    check_in_service: [3, 4, 5, 1, 2, 0]
+    cleanliness: [1, 3, 5, 2, 4, 0]
+    satisfaction: [0, 1]
+
+  value_mappings:
+    satisfaction:
+      "False": 0
+      "True": 1
+
+  missingness:
+    default_max_rate: 0.0
+    max_rate_by_column:
+      arrival_delay: 0.001

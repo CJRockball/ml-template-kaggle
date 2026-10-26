@@ -1,7 +1,7 @@
 # Makefile - project pipeline, one command end to end.
 PKG    ?= ml_template
 DS     ?= ds_v1
-CONFIG ?= configs/ai4i_binary.yaml
+CONFIG ?= configs/bronze_silver_contract.yaml
 EXP    ?= configs/experiment/xgb_baseline.yaml
 SWEEP  ?= configs/sweep/xgb_grid.yaml
 RUN    := uv run python
@@ -15,7 +15,7 @@ SCORE_ARGS ?=
 .PHONY: ingest eda silver split features train sweep evaluate pipeline clean rebuild check dashboard calibrate calibrate-check calibration-tests evaluate-check evaluation-tests release-check release score-check score scoring-tests
  
 ingest:
-	$(RUN) -m $(PKG).data.ingest --data_file $(CONFIG) --dataset_version_id $(DS)
+	$(RUN) -m $(PKG).data.ingest --contract_file $(CONFIG) --dataset_version_id $(DS)
 eda:
 	$(RUN) -m $(PKG).scripts.eda_script --dataset-version-id $(DS)
 silver:
