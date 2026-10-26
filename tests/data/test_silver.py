@@ -4,11 +4,12 @@ Uses synthetic frames and temporary output directories; no real Bronze DB.
 Requires generic Silver gates. Keeps the existing write_outputs API, including
 its fourth, report-only dictionary argument. No AI4I outcome role is supplied.
 """
+
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import json
+from copy import deepcopy
 
 import pandas as pd
 import pytest
@@ -62,8 +63,8 @@ CONFIG = {
         },
         "value_mappings": {
             "event": {
-            "False": 0,
-            "True": 1,
+                "False": 0,
+                "True": 1,
             },
         },
     },
@@ -82,15 +83,17 @@ def roles():
 
 @pytest.fixture
 def df():
-    frame = pd.DataFrame({
-        "dataset_version_id": [BRONZE_ID] * N_ROWS,
-        "source_row_number": range(1, N_ROWS + 1),
-        "record_id": [f"row-{i}" for i in range(N_ROWS)],
-        "type": ["standard", "premium"] * 3,
-        "measurement": [10.0, 12.5, 8.1, 16.2, 11.0, 9.9],
-        "count": [0, 10, 20, 30, 40, 50],
-        "event": [0, 1, 0, 1, 1, 0],
-    })
+    frame = pd.DataFrame(
+        {
+            "dataset_version_id": [BRONZE_ID] * N_ROWS,
+            "source_row_number": range(1, N_ROWS + 1),
+            "record_id": [f"row-{i}" for i in range(N_ROWS)],
+            "type": ["standard", "premium"] * 3,
+            "measurement": [10.0, 12.5, 8.1, 16.2, 11.0, 9.9],
+            "count": [0, 10, 20, 30, 40, 50],
+            "event": [0, 1, 0, 1, 1, 0],
+        }
+    )
     return frame.astype(CONFIG["silver_eda_contract"]["canonical_dtypes"])
 
 
@@ -201,14 +204,19 @@ def test_validation_does_not_mutate_input(df, roles, config):
 
 
 def test_canonicalization_uses_contract_without_real_database(
-    df, roles, config, monkeypatch,
+    df,
+    roles,
+    config,
+    monkeypatch,
 ):
     reverse = {v: k for k, v in config["silver_eda_contract"]["canonical_names"].items()}
     raw = df.rename(columns=reverse).copy()
-    raw["Event"] = raw["Event"].map({
-    0: "False",
-    1: "True",
-    })
+    raw["Event"] = raw["Event"].map(
+        {
+            0: "False",
+            1: "True",
+        }
+    )
     before = raw.copy(deep=True)
     engine = object()
 
@@ -230,7 +238,9 @@ def write(df, roles, config, tmp_path, gates=None):
     if gates is None:
         gates = silver.check_gates(df, roles, config)
     return silver.write_outputs(
-        df, roles, gates,
+        df,
+        roles,
+        gates,
         dataset_name=DATASET_NAME,
         dataset_version_id=BRONZE_ID,
         config_path=config_path,
@@ -240,7 +250,10 @@ def write(df, roles, config, tmp_path, gates=None):
 
 
 def test_passing_build_writes_roundtrip_data_and_verified_manifest(
-    df, roles, config, tmp_path,
+    df,
+    roles,
+    config,
+    tmp_path,
 ):
     assert write(df, roles, config, tmp_path) == 0
     versions = list((tmp_path / "silver" / DATASET_NAME).iterdir())
@@ -254,9 +267,10 @@ def test_passing_build_writes_roundtrip_data_and_verified_manifest(
     assert manifest["validation_passed"] is True
     assert manifest["roles"] == roles
     assert manifest["parquet_sha256"] == hashlib.sha256(parquet.read_bytes()).hexdigest()
-    assert manifest["config_sha256"] == hashlib.sha256(
-        (tmp_path / "contract.yaml").read_bytes()
-    ).hexdigest()
+    assert (
+        manifest["config_sha256"]
+        == hashlib.sha256((tmp_path / "contract.yaml").read_bytes()).hexdigest()
+    )
     report = tmp_path / "quality" / DATASET_NAME / version.name / "validation.json"
     assert json.loads(report.read_text())["passed"] is True
 
@@ -282,8 +296,7 @@ def test_existing_version_cannot_be_overwritten(df, roles, config, tmp_path):
     assert write(df, roles, config, tmp_path) == 0
     version = next((tmp_path / "silver" / DATASET_NAME).iterdir())
     snapshots = {
-        path: path.read_bytes()
-        for path in (version / "data.parquet", version / "manifest.json")
+        path: path.read_bytes() for path in (version / "data.parquet", version / "manifest.json")
     }
     with pytest.raises(FileExistsError):
         write(df, roles, config, tmp_path)

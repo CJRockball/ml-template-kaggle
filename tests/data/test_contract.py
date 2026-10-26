@@ -1,7 +1,6 @@
 import pytest
 
 from ml_template.data.contract import load_dataset_contract
-from ml_template.paths import CONFIGS
 
 TOP = """
 data:
@@ -79,5 +78,3 @@ def test_single_target_only(tmp_path):
 def test_target_mismatch_rejected(tmp_path):
     with pytest.raises(ValueError, match="disagrees"):
         load_dataset_contract(_write(tmp_path, TOP.replace("target: Y\nroles", "target: A\nroles")))
-
-

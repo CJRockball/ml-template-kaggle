@@ -24,42 +24,61 @@ VERSION = "test_ai4i_small"
 def config():
     """Self-contained contract for ai4i_small.csv, not the active project."""
     names = {
-        "UDI": "udi", "Product ID": "product_id", "Type": "type",
+        "UDI": "udi",
+        "Product ID": "product_id",
+        "Type": "type",
         "Air temperature [K]": "air_temperature_k",
         "Process temperature [K]": "process_temperature_k",
         "Rotational speed [rpm]": "rotational_speed_rpm",
-        "Torque [Nm]": "torque_nm", "Tool wear [min]": "tool_wear_min",
+        "Torque [Nm]": "torque_nm",
+        "Tool wear [min]": "tool_wear_min",
         "Machine failure": "machine_failure",
         **{c: c.lower() for c in ["TWF", "HDF", "PWF", "OSF", "RNF"]},
     }
     outcomes = ["TWF", "HDF", "PWF", "OSF", "RNF"]
     features = [
-        "Type", "Air temperature [K]", "Process temperature [K]",
-        "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]",
+        "Type",
+        "Air temperature [K]",
+        "Process temperature [K]",
+        "Rotational speed [rpm]",
+        "Torque [Nm]",
+        "Tool wear [min]",
     ]
     return {
         "data": {
-            "entity_id": "UDI", "target": "Machine failure",
-            "task": "binary_classification", "positive_label": 1,
+            "entity_id": "UDI",
+            "target": "Machine failure",
+            "task": "binary_classification",
+            "positive_label": 1,
         },
         "bronze_source_contract": {
-            "rows": 27, "columns": len(names), "col_names": list(names),
+            "rows": 27,
+            "columns": len(names),
+            "col_names": list(names),
             "roles": {
-                "id": ["UDI", "Product ID"], "feature": features,
-                "target": ["Machine failure"], "outcome": outcomes,
+                "id": ["UDI", "Product ID"],
+                "feature": features,
+                "target": ["Machine failure"],
+                "outcome": outcomes,
             },
         },
         "validation": {
-            "require_unique_entity_id": True, "max_missing_rate": 0.0,
+            "require_unique_entity_id": True,
+            "max_missing_rate": 0.0,
             "allowed_target_values": [0, 1],
         },
         "silver_eda_contract": {
             "canonical_names": names,
             "canonical_dtypes": {
-                "udi": "int64", "product_id": "object", "type": "object",
-                "air_temperature_k": "float64", "process_temperature_k": "float64",
-                "rotational_speed_rpm": "int64", "torque_nm": "float64",
-                "tool_wear_min": "int64", "machine_failure": "int8",
+                "udi": "int64",
+                "product_id": "object",
+                "type": "object",
+                "air_temperature_k": "float64",
+                "process_temperature_k": "float64",
+                "rotational_speed_rpm": "int64",
+                "torque_nm": "float64",
+                "tool_wear_min": "int64",
+                "machine_failure": "int8",
                 **{c.lower(): "int8" for c in outcomes},
             },
             "value_mappings": {"machine_failure": {"0": 0, "1": 1}},
