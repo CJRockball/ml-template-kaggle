@@ -246,7 +246,7 @@ def insert_batches(
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Ingest raw data into bronze SQLite database")
     p.add_argument(
-        "--data_file",
+        "--contract_file",
         type=str,
         required=True,
         help="Path to data to be ingested",
@@ -272,7 +272,7 @@ def main(argv=None) -> None:
     dataset_version_id = args.dataset_version_id
 
     # 2. Load configurations
-    conf_path = Path(args.data_file)
+    conf_path = Path(args.contract_file)
     with conf_path.open("r", encoding="utf-8") as file:
         data_config = yaml.safe_load(file)
 

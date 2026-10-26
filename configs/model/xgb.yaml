@@ -15,4 +15,4 @@ params:
   reg_alpha: 0.0
   max_bin: 256
   scale_pos_weight: auto  # auto = negatives / positives of the rows being fitted
-  device: cpu  # cpu or cuda
+  device: cuda  # cpu or cuda
