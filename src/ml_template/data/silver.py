@@ -42,52 +42,46 @@ def sha256_file(path: Path) -> str:
 
 
 def load_and_canonicalize(
-    dataset_version_id: str, data_config: dict[str, Any]
+    dataset_version_id: str,
+    data_config: dict[str, Any],
 ) -> tuple[pd.DataFrame, dict[str, list[str]]]:
     engine = get_engine()
-    df = extract_bronze(dataset_version_id=dataset_version_id, engine=engine)
+    raw = extract_bronze(
+        dataset_version_id=dataset_version_id,
+        engine=engine,
+    )
 
     contract = data_config["silver_eda_contract"]
-    canonical_dtypes = contract["canonical_dtypes"]
+    canonical_names = contract["canonical_names"]
 
     df = canonicalize_frame(
-        df,
+        raw,
         contract,
-        columns=list(canonical_dtypes),
+        columns=list(contract["canonical_dtypes"]),
         passthrough=("dataset_version_id", "source_row_number"),
     )
 
-    canonical_names = contract["canonical_names"]
-
-    df = df.rename(columns=canonical_names)
-
-    raw_targets = data_config["bronze_source_contract"]["roles"]["target"]
-    if len(raw_targets) != 1:
-        raise ValueError("Expected exactly one target column")
-
-    target = canonical_names.get(raw_targets[0], raw_targets[0])
-    mapping = contract["value_mappings"][target]
-
-    labels = df[target]
-
-    if labels.isna().any():
-        raise ValueError(f"{target}: missing target labels are not allowed")
-
-    unexpected = labels.loc[~labels.isin(list(mapping))].unique().tolist()
-    if unexpected:
-        raise ValueError(f"{target}: unexpected raw labels {unexpected}")
-
-    df[target] = labels.map(mapping)
-    df = df.astype(canonical_dtypes)
-
-    assert df[target].dtype == "int8"
-    assert df[target].isin([0, 1]).all()
-    print(df[target].value_counts(dropna=False))
+    # Retain source ordering, including lineage columns.
+    ordered_columns = [
+        canonical_names.get(col, col)
+        for col in raw.columns
+        if canonical_names.get(col, col) in df.columns
+    ]
+    df = df.loc[:, ordered_columns]
 
     roles = data_config["bronze_source_contract"]["roles"]
     role_map = {
-        role: [canonical_names.get(col, col) for col in cols] for role, cols in roles.items()
+        role: [canonical_names.get(col, col) for col in columns] for role, columns in roles.items()
     }
+
+    targets = role_map.get("target", [])
+    if len(targets) != 1:
+        raise ValueError("Expected exactly one target column")
+
+    target = targets[0]
+    if df[target].isna().any():
+        raise ValueError(f"{target}: missing target labels are not allowed")
+
     logger.info(
         "Loaded %d rows, %d columns for dataset_version_id=%s",
         len(df),
