@@ -73,8 +73,10 @@ artifacts/*
 
 # Scrap file
 /.policy_update_backups
+/.scoring_patch_backup
 /work_record.md
 /todo.txt
+/scratch.py
 # SQLite DB is derived: rebuild via the ingest entry point.
 # NOTE: the pattern ".db" (previous version) matches only a file literally
 # named ".db" — it never ignored secom.db. The glob is required.

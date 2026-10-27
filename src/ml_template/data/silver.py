@@ -18,6 +18,7 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from ml_template.data.canonicalize import canonicalize_frame
 from ml_template.data.extract import extract_bronze
 from ml_template.db import data_run_registry
 from ml_template.db.connection import get_engine
@@ -47,8 +48,16 @@ def load_and_canonicalize(
     df = extract_bronze(dataset_version_id=dataset_version_id, engine=engine)
 
     contract = data_config["silver_eda_contract"]
-    canonical_names = contract["canonical_names"]
     canonical_dtypes = contract["canonical_dtypes"]
+
+    df = canonicalize_frame(
+        df,
+        contract,
+        columns=list(canonical_dtypes),
+        passthrough=("dataset_version_id", "source_row_number"),
+    )
+
+    canonical_names = contract["canonical_names"]
 
     df = df.rename(columns=canonical_names)
 

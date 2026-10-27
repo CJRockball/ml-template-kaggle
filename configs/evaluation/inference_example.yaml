@@ -1,0 +1,12 @@
+schema_version: 1
+parent_run_id: run_20261025_131951_be3494
+calibration_id: null
+release_variant: raw
+primary_metric: roc_auc
+intended_use: Try first kaggle model test scoring
+limitations:
+  - External population performance is not guaranteed by internal holdout results.
+policy:
+  kind: none
+uncertainty:
+  enabled: false

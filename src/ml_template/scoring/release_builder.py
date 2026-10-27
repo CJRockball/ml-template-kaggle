@@ -21,6 +21,7 @@ from ml_template.scoring.release_artifacts import (
     write_json,
 )
 from ml_template.scoring.release_config import load_release_config
+from ml_template.scoring.source_spec import freeze_source_spec
 
 
 def _evidence(engine, request):
@@ -117,6 +118,7 @@ def prepare_release(engine, request):
 
     prepared, directory, spec, summary, provenance = _evidence(engine, request)
     source, model_features = _source_frames(prepared)
+    input_spec, source_policy, model_policy = freeze_source_spec(prepared, source)
     recipe = export_recipe(
         prepared.run_cfg.data.feature_set_id,
         list(source.columns),
@@ -145,17 +147,18 @@ def prepare_release(engine, request):
     if not is_int and not is_str:
         raise ValueError("only homogeneous integer or string entity keys supported")
     contract = {
-        "schema_version": 1,
+        "schema_version": 2,
         "key_col": prepared.key_col,
         "key_kind": "int" if is_int else "str",
-        "source_schema": frame_schema(source),
-        "model_schema": frame_schema(model_features),
-        "missing_policy": "error",
+        "source_schema": frame_schema(source, missingness=source_policy),
+        "model_schema": frame_schema(model_features, missingness=model_policy),
+        "input_spec": input_spec,
+        "missing_policy": "per_column",
         "unseen_category_policy": "error",
         "extra_columns": "error",
         "vocabulary_origin": "feature-only replay of original full-frame training preparation; no target read",
     }
-    validate_batch(source.reset_index(), contract)
+    validate_batch(source.reset_index(), contract, enforce_rates=True)
     return {
         "prepared": prepared,
         "evaluation_dir": directory,
