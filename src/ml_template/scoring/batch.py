@@ -27,7 +27,7 @@ def read_batch(path, contract):
         frame = pd.read_csv(path, **kwargs)
     else:
         raise ValueError("input must be canonical .csv or .parquet")
-    validate_batch(frame, contract)
+    validate_batch(frame, contract, enforce_rates=True)
     return frame
 
 

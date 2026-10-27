@@ -25,7 +25,7 @@ class ReleasedPredictor:
             raise ValueError("unsupported release schema")
         self.contract = read_json(self.directory / "contract.json")
         self.recipe = read_json(self.directory / "feature_recipe.json")
-        if self.contract.get("schema_version") != 1:
+        if self.contract.get("schema_version") not in {1, 2}:
             raise ValueError("unsupported scoring contract")
         self.policy = PolicyConfig.model_validate(self.info["policy"])
         if [x["name"] for x in self.contract["source_schema"]] != self.recipe["raw_columns"]:
