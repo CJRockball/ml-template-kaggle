@@ -1,4 +1,4 @@
-"""Launch-level sweep progress and parameter diagnostics, without marginal pooling."""
+"""Launch-level sweep progress, fixed-context diagnostics and marginal summaries."""
 
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ from ml_template.dashboard import experiment_data as ed
 from ml_template.dashboard import sweep_data as sd
 from ml_template.dashboard.inventory_common import grid
 from ml_template.dashboard.sweep_figs import parameter_plot, placeholder
+from ml_template.dashboard.sweep_parameter_panels import (
+    parameter_panels,
+    register_parameter_callbacks,
+)
 
 P = "sweeps-"
 
@@ -67,6 +71,7 @@ def layout(engine: Engine):
             html.P(id=P + "note"),
             dcc.Graph(id=P + "plot"),
             html.Div(id=P + "cells"),
+            *parameter_panels(P),
             html.H3("Run records and failure summaries"),
             html.Div(id=P + "runs"),
             html.P(
@@ -85,6 +90,8 @@ def layout(engine: Engine):
 
 
 def register_callbacks(app: Dash, engine: Engine):
+    register_parameter_callbacks(app, engine, _launch_frame, P)
+
     @app.callback(
         Output(P + "cohort", "options"), Output(P + "cohort", "value"), Input(P + "launch", "value")
     )
