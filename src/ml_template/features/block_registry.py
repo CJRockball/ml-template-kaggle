@@ -6,6 +6,8 @@ files, the target or other rows' statistics, and must not fit anything on data. 
 fitted (scaling, encoding, selection) belongs inside the training folds.
 
 Blocks register themselves with ``@register_block`` and are found by ``discover_blocks``.
+Missing outputs are forbidden unless named by the block's ``nullable_outputs`` policy.
+The policy permits nulls only; it never permits infinity or performs imputation.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ _NAME = re.compile(r"[a-z][a-z0-9_]*")
 
 BlockFn = Callable[[pd.DataFrame, Mapping[str, Any]], pd.DataFrame]
 SanityFn = Callable[[pd.DataFrame, pd.DataFrame, Mapping[str, Any]], dict[str, float]]
+NullableOutputs = Sequence[str] | Callable[[Mapping[str, Any]], Sequence[str]]
 
 
 def _canonical_json(obj: Any) -> str:
@@ -70,15 +73,29 @@ class Block:
     sanity: SanityFn | None = None
     expected: dict[str, float] = field(default_factory=dict)  # expected sanity values
 
+    nullable_outputs: NullableOutputs = ()
+
+    def missing_columns(self, params: Mapping[str, Any] | None = None) -> tuple[str, ...]:
+        """Resolve explicitly nullable output names; no batch-dependent permissions."""
+        policy = self.nullable_outputs
+        columns = policy(self.resolve_params(params)) if callable(policy) else policy
+        if isinstance(columns, (str, bytes)) or not isinstance(columns, Sequence):
+            raise ValueError("nullable_outputs must be a sequence of output column names")
+        if any(not isinstance(c, str) or not c for c in columns):
+            raise ValueError("nullable_outputs must contain non-empty strings")
+        if len(set(columns)) != len(columns):
+            raise ValueError("nullable_outputs contains duplicate output names")
+        return tuple(columns)
+
     def required_columns(self, params: Mapping[str, Any] | None = None) -> tuple[str, ...]:
         merged = self.resolve_params(params)
         cols = self.requires(merged) if callable(self.requires) else self.requires
         return tuple(cols)
 
     def code_sha256(self) -> str:
-        """Hash of the block module plus its ``_*`` helper modules."""
+        """Hash the block, its helpers and the shared execution/validation implementation."""
         module = sys.modules[self.fn.__module__]
-        parts = [_source(module), *_helper_sources(module)]
+        parts = [_source(module), *_helper_sources(module), _source(sys.modules[__name__])]
         return hashlib.sha256("\n#---\n".join(parts).encode()).hexdigest()
 
     def resolve_params(self, overrides: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -93,6 +110,7 @@ class Block:
             "silver": silver_id,
             "code": self.code_sha256(),
             "params": self.resolve_params(params),
+            "nullable_outputs": list(self.missing_columns(params)),
         }
         digest = hashlib.sha256(_canonical_json(payload).encode()).hexdigest()
         return f"{self.name}_{digest[:12]}"
@@ -102,6 +120,7 @@ class Block:
         missing = [c for c in self.required_columns(params) if c not in features.columns]
         if missing:
             raise KeyError(f"block {self.name!r} needs columns {missing}")
+        allowed_missing = set(self.missing_columns(params))
         out = self.fn(features, self.resolve_params(params))
         if not isinstance(out, pd.DataFrame) or out.shape[1] == 0:
             raise ValueError(f"block {self.name!r} must return a non-empty DataFrame")
@@ -112,11 +131,26 @@ class Block:
             raise ValueError(f"block {self.name!r} duplicates input columns {clash}")
         if out.columns.duplicated().any():
             raise ValueError(f"block {self.name!r} returns duplicate column names")
+        unknown = sorted(allowed_missing - set(out.columns))
+        if unknown:
+            raise ValueError(f"block {self.name!r} declares unknown nullable outputs {unknown}")
         numeric = out.select_dtypes(include="number")
-        if numeric.shape[1] and not np.isfinite(numeric.to_numpy(dtype=float)).all():
-            raise ValueError(f"block {self.name!r} produced NaN or infinite values")
-        if out.isna().any().any():
-            raise ValueError(f"block {self.name!r} produced missing values")
+        for column in numeric:
+            observed = numeric[column].dropna().to_numpy(dtype=float)
+            if not np.isfinite(observed).all():
+                raise ValueError(
+                    f"block {self.name!r} produced NaN or infinite values in {column!r}"
+                )
+        unexpected = [c for c in out if out[c].isna().any() and c not in allowed_missing]
+        if unexpected:
+            reason = (
+                "NaN or infinite values"
+                if any(c in numeric for c in unexpected)
+                else "missing values"
+            )
+            raise ValueError(
+                f"block {self.name!r} produced {reason} in non-nullable outputs {unexpected}"
+            )
         return out
 
 
@@ -131,6 +165,7 @@ def register_block(
     params: Mapping[str, Any] | None = None,
     sanity: SanityFn | None = None,
     expected: Mapping[str, float] | None = None,
+    nullable_outputs: NullableOutputs = (),
 ) -> Callable[[BlockFn], BlockFn]:
     """Decorator that adds a block function to the registry."""
     if not _NAME.fullmatch(name):
@@ -147,6 +182,7 @@ def register_block(
             params=dict(params or {}),
             sanity=sanity,
             expected=dict(expected or {}),
+            nullable_outputs=nullable_outputs,
         )
         return fn
 

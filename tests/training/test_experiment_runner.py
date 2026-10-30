@@ -191,7 +191,7 @@ def test_permutation_importance_is_stored_per_fold_with_pooled_spread(world):
     rows = reg.get_feature_importance(engine, run_id, split="cv")
     assert {r["feature"] for r in rows} == {"temp", "speed"}
     assert {r["fold"] for r in rows} == {-1, 0, 1, 2, 3, 4}
-    assert {r["method"] for r in rows} == {"permutation_pr_auc_drop"}
+    assert {r["method"] for r in rows} == {"permutation_roc_auc_drop"}
     pooled = {r["feature"]: r for r in rows if r["fold"] == -1}
     assert pooled["temp"]["value"] > pooled["speed"]["value"]  # temp drives the target
     assert pooled["temp"]["std"] is not None and pooled["temp"]["std"] >= 0
