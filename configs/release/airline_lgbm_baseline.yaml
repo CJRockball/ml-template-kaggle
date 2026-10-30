@@ -1,0 +1,8 @@
+schema_version: 1
+name: airline_lgbm
+parent_run_id: run_20261029_060007_0bfb01 
+evaluation_id: eval_20261029_101913_6f26a71f 
+calibration_id: null
+intended_use: Test first lgbm model and pred kaggle airline
+acknowledge_research_release: true
+parity_atol: 0.0000001
