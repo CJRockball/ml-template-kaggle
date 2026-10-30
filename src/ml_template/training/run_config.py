@@ -108,7 +108,7 @@ class AnalysisConfig(_Strict):
 
 class XGBParams(_Strict):
     objective: Literal["binary:logistic"] = "binary:logistic"
-    eval_metric: Literal["aucpr", "logloss"] = "aucpr"  # watched by early stopping
+    eval_metric: Literal["aucpr", "logloss", "auc"] = "aucpr"  # watched by early stopping
     n_estimators: int = Field(2000, ge=1)  # a cap; early stopping picks the real count
     early_stopping_rounds: int = Field(50, ge=1)
     max_depth: int = Field(4, ge=1)
@@ -129,6 +129,54 @@ class XGBModelConfig(_Strict):
     params: XGBParams = Field(default_factory=XGBParams)
 
 
+class LGBMParams(_Strict):
+    objective: Literal["binary"] = "binary"
+    eval_metric: Literal["average_precision", "binary_logloss", "auc"] = "average_precision"
+    n_estimators: int = Field(2000, ge=1)  # a cap; early stopping picks the real count
+    early_stopping_rounds: int = Field(50, ge=1)
+    num_leaves: int = Field(15, ge=2)
+    max_depth: int = Field(-1, ge=-1)  # -1 = no limit
+    learning_rate: float = Field(0.05, gt=0)
+    subsample: float = Field(0.8, gt=0, le=1)
+    subsample_freq: int = Field(1, ge=0)  # bagging happens only when this is above 0
+    colsample_bytree: float = Field(0.8, gt=0, le=1)
+    min_child_samples: int = Field(20, ge=1)
+    reg_lambda: float = Field(1.0, ge=0)
+    reg_alpha: float = Field(0.0, ge=0)
+    max_bin: int = Field(255, ge=2)
+    # "auto" = negatives / positives of the rows being fitted.
+    scale_pos_weight: Annotated[float, Field(gt=0)] | Literal["auto"] = "auto"
+
+
+class LGBMModelConfig(_Strict):
+    type: Literal["lgbm"] = "lgbm"
+    params: LGBMParams = Field(default_factory=LGBMParams)
+
+
+class CatBoostParams(_Strict):
+    loss_function: Literal["Logloss"] = "Logloss"
+    eval_metric: Literal["PRAUC", "Logloss", "AUC"] = "PRAUC"  # watched by early stopping
+    n_estimators: int = Field(2000, ge=1)  # a cap; early stopping picks the real count
+    early_stopping_rounds: int = Field(50, ge=1)
+    depth: int = Field(4, ge=1, le=16)
+    learning_rate: float = Field(0.05, gt=0)
+    subsample: float = Field(0.8, gt=0, le=1)  # Bernoulli row sampling
+    rsm: float = Field(0.8, gt=0, le=1)  # share of features per split
+    l2_leaf_reg: float = Field(3.0, ge=0)
+    border_count: int = Field(254, ge=1, le=65535)
+    scale_pos_weight: Annotated[float, Field(gt=0)] | Literal["auto"] = "auto"
+
+
+class CatBoostModelConfig(_Strict):
+    type: Literal["catboost"] = "catboost"
+    params: CatBoostParams = Field(default_factory=CatBoostParams)
+
+
+ModelConfig = Annotated[
+    XGBModelConfig | LGBMModelConfig | CatBoostModelConfig, Field(discriminator="type")
+]
+
+
 class RunConfig(_Strict):
     schema_version: Literal[2] = SCHEMA_VERSION
     experiment_name: str
@@ -140,8 +188,8 @@ class RunConfig(_Strict):
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     # Steps that learn from training rows (group statistics, power transforms); None = none.
     fitted_features: list[dict[str, Any]] | None = None
-    # Add further model types here later as a discriminated union on ``type``.
-    model: XGBModelConfig = Field(default_factory=XGBModelConfig)
+    # Add further model types to ``ModelConfig`` (a union keyed on ``type``).
+    model: ModelConfig = Field(default_factory=XGBModelConfig)
 
     @field_validator("experiment_name")
     @classmethod

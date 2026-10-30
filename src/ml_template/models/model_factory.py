@@ -48,16 +48,29 @@ def prepare_features(X: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def build_adapter_factory(cfg: RunConfig) -> AdapterFactory:
-    """Return a callable that makes a fresh, unfitted adapter for this config."""
-    if cfg.model.type == "xgb":
+def _adapter_class(model_type: str) -> type:
+    """The adapter class for a model type. Imports only the library that is needed."""
+    if model_type == "xgb":
         from ml_template.models.xgb_classifier import XGBAdapter
 
-        def base() -> ModelAdapter:
-            return XGBAdapter(cfg.model.params, cfg.seed)
+        return XGBAdapter
+    if model_type == "lgbm":
+        from ml_template.models.lgbm_classifier import LGBMAdapter
 
-    else:
-        raise ValueError(f"unknown model type {cfg.model.type!r}")
+        return LGBMAdapter
+    if model_type == "catboost":
+        from ml_template.models.catboost_classifier import CatBoostAdapter
+
+        return CatBoostAdapter
+    raise ValueError(f"unknown model type {model_type!r}")
+
+
+def build_adapter_factory(cfg: RunConfig) -> AdapterFactory:
+    """Return a callable that makes a fresh, unfitted adapter for this config."""
+    adapter_class = _adapter_class(cfg.model.type)
+
+    def base() -> ModelAdapter:
+        return adapter_class(cfg.model.params, cfg.seed)
 
     if not cfg.fitted_features:
         return base
@@ -67,13 +80,7 @@ def build_adapter_factory(cfg: RunConfig) -> AdapterFactory:
 
 
 def load_adapter(cfg: RunConfig, path: Path) -> ModelAdapter:
-    if cfg.model.type == "xgb":
-        from ml_template.models.xgb_classifier import XGBAdapter
-
-        inner = XGBAdapter.load(cfg.model.params, cfg.seed, path)
-    else:
-        raise ValueError(f"unknown model type {cfg.model.type!r}")
-
+    inner = _adapter_class(cfg.model.type).load(cfg.model.params, cfg.seed, path)
     if not cfg.fitted_features:
         return inner
     from ml_template.features.fitted_features import TransformingAdapter

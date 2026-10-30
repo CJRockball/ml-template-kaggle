@@ -1,0 +1,20 @@
+schema_version: 1
+parent_run_id: run_20261029_060007_0bfb01
+calibration_id: null
+release_variant: raw
+primary_metric: roc_auc
+intended_use: Try first kaggle model test scoring
+limitations:
+  - External population performance is not guaranteed by internal holdout results.
+policy:
+  kind: none
+uncertainty:
+  enabled: false
+acknowledge_prior_exposure: true
+prior_exposure_note: >-
+  This Silver dataset's holdout was previously evaluated for the
+  XGBoost baseline in eval_20261026_235015_f01ef8a9. This evaluation
+  assesses the frozen LightGBM baseline for research and Kaggle
+  scoring. Results are not an untouched first confirmation.
+
+supersedes_evaluation_id: null

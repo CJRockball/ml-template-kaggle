@@ -75,6 +75,7 @@ artifacts/*
 /.policy_update_backups
 /.scoring_patch_backup
 /work_record.md
+/experiment_record.md
 /todo.txt
 /scratch.py
 # SQLite DB is derived: rebuild via the ingest entry point.

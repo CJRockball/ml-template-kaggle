@@ -1,0 +1,8 @@
+schema_version: 1
+name: airline_cat
+parent_run_id: run_20261029_063222_3eb458 
+evaluation_id: eval_20261029_115344_c86aedf7
+calibration_id: null
+intended_use: Test first cat model and pred kaggle airline
+acknowledge_research_release: true
+parity_atol: 0.0000001
