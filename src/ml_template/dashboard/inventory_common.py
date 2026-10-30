@@ -111,6 +111,10 @@ def grid(table: pd.DataFrame, height: int = 320):
         clean[col] = clean[col].map(
             lambda value: json.dumps(value) if isinstance(value, (dict, list)) else value
         )
+
+    # Mapping can infer numeric dtype and reintroduce NaN.
+    clean = clean.astype(object).where(clean.notna(), None)
+
     return dag.AgGrid(
         rowData=clean.to_dict("records"),
         columnDefs=[{"field": str(c)} for c in clean],
