@@ -187,9 +187,6 @@ def test_invalid_yaml_syntax_is_actionable(tmp_path):
 
 
 def test_full_loader_uses_recorded_sweep_path_and_whole_launch(tmp_path, monkeypatch):
-    import sys
-    from types import SimpleNamespace
-
     from ml_template.dashboard.sweep_declared_parameters import load_launch_summary_inputs
 
     runs, params = inventories()
@@ -204,14 +201,14 @@ def test_full_loader_uses_recorded_sweep_path_and_whole_launch(tmp_path, monkeyp
             "sweep_path": [str(source)],
         }
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "ml_template.dashboard.sweep_data",
-        SimpleNamespace(
-            load_sweep_data=lambda engine: (launches, runs, params),
-        ),
+    monkeypatch.setattr(
+        "ml_template.dashboard.sweep_data.load_sweep_data",
+        lambda engine: (launches, runs, params),
     )
-    monkeypatch.setitem(sys.modules, "ml_template.paths", SimpleNamespace(ROOT=tmp_path))
+    monkeypatch.setattr(
+        "ml_template.paths.ROOT",
+        tmp_path,
+    )
     result, actual_spec, actual_source = load_launch_summary_inputs(None, "launch")
     assert len(result) == 3
     assert set(actual_spec["grid"]) == set(document()["grid"])
@@ -220,9 +217,6 @@ def test_full_loader_uses_recorded_sweep_path_and_whole_launch(tmp_path, monkeyp
 
 
 def test_current_yaml_name_mismatch_is_not_silently_used(tmp_path, monkeypatch):
-    import sys
-    from types import SimpleNamespace
-
     from ml_template.dashboard.sweep_declared_parameters import load_launch_summary_inputs
 
     runs, params = inventories()
@@ -237,13 +231,13 @@ def test_current_yaml_name_mismatch_is_not_silently_used(tmp_path, monkeypatch):
             "sweep_path": [str(source)],
         }
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "ml_template.dashboard.sweep_data",
-        SimpleNamespace(
-            load_sweep_data=lambda engine: (launches, runs, params),
-        ),
+    monkeypatch.setattr(
+        "ml_template.dashboard.sweep_data.load_sweep_data",
+        lambda engine: (launches, runs, params),
     )
-    monkeypatch.setitem(sys.modules, "ml_template.paths", SimpleNamespace(ROOT=tmp_path))
+    monkeypatch.setattr(
+        "ml_template.paths.ROOT",
+        tmp_path,
+    )
     with pytest.raises(ValueError, match="differs"):
         load_launch_summary_inputs(None, "launch")
