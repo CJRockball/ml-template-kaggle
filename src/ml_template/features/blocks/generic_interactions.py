@@ -8,9 +8,12 @@ like any other block. Parameters (all lists are optional)::
     numeric_pairs:     [{a: torque_nm, b: rotational_speed_rpm, ops: [product, ratio, difference]}]
     numeric_category:  [{numeric: torque_nm, category: type, levels: [L, M, H]}]
     category_pairs:    [{a: type, b: shift}]
+    nullable_outputs:  [torque_nm__minus__rotational_speed_rpm]
 
 Domain rules are strict: log of a non-positive value, a zero denominator and similar raise
-instead of producing NaN or infinity.
+instead of producing NaN or infinity. Existing missing inputs propagate to explicitly
+declared nullable outputs. Numeric/category gates propagate missingness from either input;
+category crosses preserve actual nulls rather than creating string labels such as "nan".
 
 This module also holds ``PowerTransformStep`` (Box-Cox, Yeo-Johnson). It must be fitted on
 training rows, so it runs inside the training folds (see ``features/fitted_features.py``).
@@ -33,6 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "numeric_pairs": [],
     "numeric_category": [],
     "category_pairs": [],
+    "nullable_outputs": [],
 }
 
 
@@ -42,22 +46,22 @@ def _need(ok: pd.Series, message: str, column: str) -> None:
 
 
 def _sqrt(s: pd.Series, col: str) -> pd.Series:
-    _need(s >= 0, "sqrt needs values >= 0", col)
+    _need(s.isna() | (s >= 0), "sqrt needs values >= 0", col)
     return np.sqrt(s)
 
 
 def _log(s: pd.Series, col: str) -> pd.Series:
-    _need(s > 0, "log needs values > 0", col)
+    _need(s.isna() | (s > 0), "log needs values > 0", col)
     return np.log(s)
 
 
 def _log1p(s: pd.Series, col: str) -> pd.Series:
-    _need(s > -1, "log1p needs values > -1", col)
+    _need(s.isna() | (s > -1), "log1p needs values > -1", col)
     return np.log1p(s)
 
 
 def _reciprocal(s: pd.Series, col: str) -> pd.Series:
-    _need(s != 0, "reciprocal needs non-zero values", col)
+    _need(s.isna() | (s != 0), "reciprocal needs non-zero values", col)
     return 1.0 / s
 
 
@@ -73,7 +77,7 @@ UNARY: dict[str, Callable[[pd.Series, str], pd.Series]] = {
 
 
 def _ratio(a: pd.Series, b: pd.Series, cb: str) -> pd.Series:
-    _need(b != 0, "ratio needs a non-zero denominator", cb)
+    _need(b.isna() | (b != 0), "ratio needs a non-zero denominator", cb)
     return a / b
 
 
@@ -100,7 +104,10 @@ def required_columns(params: Mapping[str, Any]) -> tuple[str, ...]:
 def _numeric(df: pd.DataFrame, col: str) -> pd.Series:
     if not pd.api.types.is_numeric_dtype(df[col]):
         raise ValueError(f"column {col!r} must be numeric")
-    return df[col].astype(float)
+    values = df[col].astype(float)
+    if not np.isfinite(values.dropna().to_numpy()).all():
+        raise ValueError(f"column {col!r} contains infinite values")
+    return values
 
 
 def _ops(spec_ops: Sequence[str], allowed: Mapping[str, Any], what: str) -> list[str]:
@@ -115,6 +122,7 @@ def _ops(spec_ops: Sequence[str], allowed: Mapping[str, Any], what: str) -> list
     requires=required_columns,
     description="parameter-driven transforms, numeric/categorical crosses (stateless)",
     params=DEFAULTS,
+    nullable_outputs=lambda params: params["nullable_outputs"],
 )
 def generic_interactions(df: pd.DataFrame, params: Mapping[str, Any]) -> pd.DataFrame:
     out: dict[str, pd.Series] = {}
@@ -135,11 +143,16 @@ def generic_interactions(df: pd.DataFrame, params: Mapping[str, Any]) -> pd.Data
             tag, fn = PAIR[op]
             add(f"{p['a']}__{tag}__{p['b']}", fn(a, b, p["b"]))
     for g in params["numeric_category"]:
-        s, cat = _numeric(df, g["numeric"]), df[g["category"]].astype(str)
+        s, cat = _numeric(df, g["numeric"]), df[g["category"]].astype("string")
         for level in g["levels"]:
-            add(f"{g['numeric']}__if_{g['category']}_{level}", s.where(cat == str(level), 0.0))
+            values = s.where(cat.eq(str(level)).fillna(False), 0.0)
+            values = values.mask(s.isna() | cat.isna())
+            add(f"{g['numeric']}__if_{g['category']}_{level}", values)
     for c in params["category_pairs"]:
-        add(f"{c['a']}__x__{c['b']}", df[c["a"]].astype(str) + "|" + df[c["b"]].astype(str))
+        add(
+            f"{c['a']}__x__{c['b']}",
+            df[c["a"]].astype("string") + "|" + df[c["b"]].astype("string"),
+        )
     if not out:
         raise ValueError("generic_interactions has nothing to build; set at least one section")
     return pd.DataFrame(out, index=df.index)

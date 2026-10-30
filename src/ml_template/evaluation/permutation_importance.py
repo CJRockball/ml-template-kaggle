@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from ml_template.evaluation.metrics import pr_auc
+from ml_template.evaluation.metrics import roc_auc
 
-METHOD = "permutation_pr_auc_drop"
+METHOD = "permutation_roc_auc_drop"  # "permutation_pr_auc_drop"
 
 
 def _subsample(
@@ -51,7 +51,7 @@ def permutation_importance(
         raise ValueError("X index must be unique")
     X, y = _subsample(X, y, max_rows, seed)
     y_arr = y.to_numpy()
-    baseline = pr_auc(y_arr, adapter.predict_proba(X))
+    baseline = roc_auc(y_arr, adapter.predict_proba(X))  # pr_auc(y_arr, adapter.predict_proba(X))
     if math.isnan(baseline):
         raise ValueError("validation rows contain a single class; PR-AUC is undefined")
 
@@ -65,7 +65,8 @@ def permutation_importance(
             shuffled = original.iloc[rng.permutation(len(X))]
             shuffled.index = X.index  # keeps the dtype, including categories
             work[col] = shuffled
-            drops.append(baseline - pr_auc(y_arr, adapter.predict_proba(work)))
+            drops.append(baseline - roc_auc(y_arr, adapter.predict_proba(work)))
+            # drops.append(baseline - pr_auc(y_arr, adapter.predict_proba(work)))
         work[col] = original
         rows.append(
             {
