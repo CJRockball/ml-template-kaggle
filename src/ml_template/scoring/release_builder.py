@@ -10,7 +10,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ml_template.scoring.input_contract import frame_schema, validate_batch
+from ml_template.scoring.input_contract import validate_batch
+from ml_template.scoring.pre_gold_schema import build_pre_gold_contract
 from ml_template.scoring.release_artifacts import (
     inside,
     read_json,
@@ -80,6 +81,12 @@ def _evidence(engine, request):
             name.startswith(("features/", "models/")) or name == "training/run_config.py"
         ) and now_code.get(name) != expected:
             raise ValueError(f"evaluated prediction implementation changed: {name}")
+    evaluated_predictor = old.get("predictor")
+    current_predictor = current.get("predictor")
+    if evaluated_predictor is not None and evaluated_predictor != current_predictor:
+        raise ValueError("selected predictor artifacts changed after evaluation")
+    if spec.predictor.kind == "cv_mean" and evaluated_predictor is None:
+        raise ValueError("cv_mean requires an evaluation bound to the fold-average predictor")
     return prepared, directory, spec, summary, old
 
 
@@ -146,18 +153,16 @@ def prepare_release(engine, request):
     is_str = key_values.map(lambda v: isinstance(v, str)).all()
     if not is_int and not is_str:
         raise ValueError("only homogeneous integer or string entity keys supported")
-    contract = {
-        "schema_version": 2,
-        "key_col": prepared.key_col,
-        "key_kind": "int" if is_int else "str",
-        "source_schema": frame_schema(source, missingness=source_policy),
-        "model_schema": frame_schema(model_features, missingness=model_policy),
-        "input_spec": input_spec,
-        "missing_policy": "per_column",
-        "unseen_category_policy": "error",
-        "extra_columns": "error",
-        "vocabulary_origin": "feature-only replay of original full-frame training preparation; no target read",
-    }
+    contract = build_pre_gold_contract(
+        source,
+        model_features,
+        key_col=prepared.key_col,
+        key_kind="int" if is_int else "str",
+        input_spec=input_spec,
+        source_policy=source_policy,
+        model_policy=model_policy,
+        legacy_model_limits=getattr(request, "model_max_missing_rate", {}),
+    )
     validate_batch(source.reset_index(), contract, enforce_rates=True)
     return {
         "prepared": prepared,
@@ -276,6 +281,8 @@ def build_release(engine, request, *, check_only=False, output_root=None):
             "limitations": list(spec.limitations),
             "evaluation_summary": material["summary"],
         }
+        info["predictor_kind"] = spec.predictor.kind
+        write_json(stage / "predictor.json", prepared.provenance["predictor"])
         write_json(stage / "release.json", info)
         write_json(stage / "contract.json", material["contract"])
         write_json(stage / "feature_recipe.json", material["recipe"])
@@ -288,14 +295,19 @@ def build_release(engine, request, *, check_only=False, output_root=None):
                 "selection_source_hashes": selection_source_hashes,
             },
         )
-        names = ["config.json", "model.ubj"]
-        if prepared.run_cfg.fitted_features:
-            names.append("model.transformer.joblib")
+        descriptor = prepared.provenance["predictor"]
+        names = ["config.json", *descriptor["files_sha256"]]
         for name in names:
-            shutil.copyfile(prepared.run_dir / name, stage / name)
-            expected = prepared.provenance["parent_files_sha256"].get(name)
-            if expected is None or sha256(stage / name) != expected:
-                raise ValueError(f"copied parent artifact mismatch: {name}")
+            destination_file = inside(stage, name)
+            destination_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(prepared.run_dir / name, destination_file)
+            expected = (
+                prepared.provenance["parent_files_sha256"].get(name)
+                if name == "config.json"
+                else descriptor["files_sha256"][name]
+            )
+            if expected is None or sha256(destination_file) != expected:
+                raise ValueError(f"copied predictor artifact mismatch: {name}")
         if prepared.calibration_dir is not None:
             shutil.copyfile(prepared.calibration_dir / "calibrator.json", stage / "calibrator.json")
             if (

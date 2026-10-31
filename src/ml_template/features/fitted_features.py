@@ -13,6 +13,8 @@ Steps are listed under ``fitted_features`` in an experiment YAML::
       - {step: power_transform, columns: [tool_wear_min], method: yeo-johnson}
 
 Every step is fitted on the raw columns it receives and returns only new columns.
+Supervised steps use fit_transform(X, y) for cross-fitted training values; inference
+always uses transform(X) with the frozen full-training mappings.
 """
 
 from __future__ import annotations
@@ -27,10 +29,12 @@ import pandas as pd
 
 from ml_template.features.blocks.generic_interactions import PowerTransformStep
 from ml_template.features.group_statistics import GroupStatisticsStep
+from ml_template.features.target_encoding import TargetEncodingStep
 
 STEP_TYPES: dict[str, type] = {
     PowerTransformStep.name: PowerTransformStep,
     GroupStatisticsStep.name: GroupStatisticsStep,
+    TargetEncodingStep.name: TargetEncodingStep,
 }
 
 
@@ -60,18 +64,44 @@ class FittedFeatureTransformer:
         self.specs = [dict(s) for s in specs]
         self.steps = build_steps(self.specs)
 
-    def fit(self, X: pd.DataFrame) -> FittedFeatureTransformer:
+    def fit(
+        self, X: pd.DataFrame, y: pd.Series | np.ndarray | None = None
+    ) -> FittedFeatureTransformer:
+        """Fit frozen inference mappings; use fit_transform for model-training inputs."""
         for step in self.steps:
-            step.fit(X)
+            if getattr(step, "requires_y", False):
+                step.fit(X, y)
+            else:
+                step.fit(X)
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        parts = [X, *(step.transform(X) for step in self.steps)]
-        out = pd.concat(parts, axis=1)
+    def _append(self, X: pd.DataFrame, outputs: Sequence[pd.DataFrame]) -> pd.DataFrame:
+        for step, frame in zip(self.steps, outputs, strict=True):
+            if not isinstance(frame, pd.DataFrame) or not frame.index.equals(X.index):
+                raise ValueError("fitted step must return a DataFrame with the same index")
+            if list(frame.columns) != step.output_columns():
+                raise ValueError("fitted step output columns differ from its declared schema")
+        out = pd.concat([X, *outputs], axis=1)
         dup = sorted(set(out.columns[out.columns.duplicated()]))
         if dup:
             raise ValueError(f"fitted features duplicate existing columns {dup}")
         return out
+
+    def fit_transform(
+        self, X: pd.DataFrame, y: pd.Series | np.ndarray | None = None
+    ) -> pd.DataFrame:
+        """Training representation: supervised outputs must be inner out-of-fold."""
+        outputs = []
+        for step in self.steps:
+            if getattr(step, "requires_y", False):
+                outputs.append(step.fit_transform(X, y))
+            else:
+                step.fit(X)
+                outputs.append(step.transform(X))
+        return self._append(X, outputs)
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        return self._append(X, [step.transform(X) for step in self.steps])
 
     def output_columns(self, input_columns: Sequence[str]) -> list[str]:
         return [*input_columns, *(c for s in self.steps for c in s.output_columns())]
@@ -103,14 +133,16 @@ class TransformingAdapter:
     def fit_with_validation(
         self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series
     ) -> int:
-        self.transformer = FittedFeatureTransformer(self.specs).fit(X_train)
+        self.transformer = FittedFeatureTransformer(self.specs)
+        train = self.transformer.fit_transform(X_train, y_train)
         return self.inner.fit_with_validation(
-            self.transformer.transform(X_train), y_train, self.transformer.transform(X_val), y_val
+            train, y_train, self.transformer.transform(X_val), y_val
         )
 
     def refit(self, X: pd.DataFrame, y: pd.Series, n_rounds: int) -> None:
-        self.transformer = FittedFeatureTransformer(self.specs).fit(X)
-        self.inner.refit(self.transformer.transform(X), y, n_rounds)
+        self.transformer = FittedFeatureTransformer(self.specs)
+        train = self.transformer.fit_transform(X, y)
+        self.inner.refit(train, y, n_rounds)
 
     def learning_curve(
         self,
@@ -121,9 +153,10 @@ class TransformingAdapter:
         n_rounds: int,
         metric: str,
     ) -> pd.DataFrame:
-        transformer = FittedFeatureTransformer(self.specs).fit(X_train)
+        transformer = FittedFeatureTransformer(self.specs)
+        train = transformer.fit_transform(X_train, y_train)
         return self.inner.learning_curve(
-            transformer.transform(X_train),
+            train,
             y_train,
             transformer.transform(X_val),
             y_val,

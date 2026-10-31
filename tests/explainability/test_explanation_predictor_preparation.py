@@ -6,17 +6,21 @@ import pytest
 
 from ml_template.scoring import input_contract as contract_module
 from ml_template.scoring import predictor as module
+from ml_template.scoring.pre_gold_schema import get_preprocessor_schema
 
 
 def predictor(monkeypatch):
     obj = object.__new__(module.ReleasedPredictor)
     source = pd.DataFrame({"x": [1.0, 2.0]})
     obj.contract = {
+        "schema_version": 1,
         "key_col": "entity",
         "key_kind": "int",
         "source_schema": contract_module.frame_schema(source),
         "model_schema": contract_module.frame_schema(source),
     }
+
+    obj.preprocessor_input_schema = get_preprocessor_schema(obj.contract)
     obj.recipe = {"schema_version": 1, "raw_columns": ["x"], "columns": ["x"], "blocks": []}
     obj.calibrator = None
     obj.info = {"release_variant": "raw"}

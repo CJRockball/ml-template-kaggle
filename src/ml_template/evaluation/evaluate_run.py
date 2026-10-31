@@ -36,9 +36,9 @@ def _load_inputs(p):
 
 
 def _load_model(p):
-    from ml_template.models.model_factory import load_adapter
+    from ml_template.models.predictor_selection import load_evaluation_predictor
 
-    return load_adapter(p.run_cfg, p.run_dir / "model.ubj")
+    return load_evaluation_predictor(p)
 
 
 def _save_predictions(frame, path):
@@ -166,11 +166,14 @@ def evaluate_spec(
         if list(X.columns) != p.feature_names:
             raise ValueError("saved input feature order changed")
         y = labels(inputs.y.loc[p.hold_keys].to_numpy(), len(X))
-        model = (
-            _load_model(p)
-            if adapter_loader is None
-            else adapter_loader(p.run_cfg, p.run_dir / "model.ubj")
-        )
+        if adapter_loader is None:
+            model = _load_model(p)
+        elif getattr(getattr(cfg, "predictor", None), "kind", "final") == "cv_mean":
+            from ml_template.models.predictor_selection import load_evaluation_predictor
+
+            model = load_evaluation_predictor(p, adapter_loader=adapter_loader)
+        else:
+            model = adapter_loader(p.run_cfg, p.run_dir / "model.ubj")
         variants = {"raw": probabilities(model.predict_proba(X))}
         if len(variants["raw"]) != len(y):
             raise ValueError("prediction length mismatch")

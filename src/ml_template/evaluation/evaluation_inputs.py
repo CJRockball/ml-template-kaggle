@@ -208,6 +208,21 @@ def prepare_evaluation(engine, spec, *, silver_root=None, split_root=None, featu
             if r["fold"] == -1
         ],
     )
+    from ml_template.models.predictor_selection import describe_predictor
+
+    stored_fold_ids = sorted(
+        int(value) for value in assignments.loc[assignments.partition.eq("dev"), "fold"].unique()
+    )
+    descriptor = describe_predictor(
+        cfg,
+        run_dir,
+        spec.predictor.kind,
+        fold_ids=stored_fold_ids,
+        verify_artifact=a.verify_artifact,
+    )
+    provenance["predictor"] = descriptor
+    for artifact_name, artifact_hash in descriptor["files_sha256"].items():
+        provenance["input_hashes"][f"predictor/{artifact_name}"] = artifact_hash
     identity_hash = digest({"spec": spec.model_dump(mode="json"), "provenance": provenance})
     return PreparedEvaluation(
         spec,

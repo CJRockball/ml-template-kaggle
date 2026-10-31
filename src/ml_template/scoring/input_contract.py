@@ -23,24 +23,35 @@ def missing_limit(policy, column):
     return limit
 
 
-def _check_nulls(series, limit, enforce_rates=False):
+def _check_nulls(series, limit, enforce_rates=False, *, nullable=None):
+    rate = float(series.isna().mean())
+    if nullable is not None:
+        if type(nullable) is not bool:
+            raise ValueError("nullable must be a boolean")
+        if rate and not nullable:
+            raise ValueError(f"missing values are unsupported: {series.name}")
+        return
+    # Legacy V1/V2 behavior only. V3 separates permission from observed rate.
     if not 0 <= limit <= 1:
         raise ValueError("missing-rate limit must be in [0,1]")
-    rate = float(series.isna().mean())
     if rate and limit == 0:
         raise ValueError(f"missing values are unsupported: {series.name}")
     if enforce_rates and rate > limit:
         raise ValueError(f"missing rate exceeds limit: {series.name}: {rate} > {limit}")
 
 
-def frame_schema(frame, *, missingness=None):
+def frame_schema(frame, *, missingness=None, nullable=None):
     if frame.empty or frame.columns.duplicated().any():
         raise ValueError("nonempty frame with unique columns required")
+    if nullable is not None and type(nullable) is not bool:
+        raise ValueError("nullable must be a boolean or None for legacy policy")
+    if nullable is not None and missingness is not None:
+        raise ValueError("use nullable OR legacy missingness, not both")
     schema = []
     for name in frame.columns:
         series = frame[name]
-        limit = missing_limit(missingness, name)
-        _check_nulls(series, limit, enforce_rates=True)
+        limit = missing_limit(missingness, name) if nullable is None else 0.0
+        _check_nulls(series, limit, enforce_rates=True, nullable=nullable)
         if isinstance(series.dtype, pd.CategoricalDtype):
             item = {
                 "kind": "category",
@@ -48,20 +59,32 @@ def frame_schema(frame, *, missingness=None):
                 "ordered": bool(series.cat.ordered),
             }
         elif pd.api.types.is_bool_dtype(series.dtype):
-            item = {"kind": "bool", "dtype": str(series.dtype)}
+            item = {"kind": "bool", "dtype": "boolean" if nullable else str(series.dtype)}
         elif pd.api.types.is_integer_dtype(series.dtype):
-            item = {"kind": "integer", "dtype": str(series.dtype)}
+            dtype = pd.api.types.pandas_dtype(series.dtype)
+            if nullable:
+                native = np.dtype(getattr(dtype, "numpy_dtype", dtype))
+                prefix = "UInt" if native.kind == "u" else "Int"
+                dtype = f"{prefix}{native.itemsize * 8}"
+            item = {"kind": "integer", "dtype": str(dtype)}
         elif pd.api.types.is_float_dtype(series.dtype):
             item = {"kind": "float", "dtype": str(series.dtype)}
         elif pd.api.types.is_object_dtype(series.dtype) or pd.api.types.is_string_dtype(
             series.dtype
         ):
-            if not series.dropna().map(lambda v: isinstance(v, str)).all():
+            if not series.dropna().map(lambda value: isinstance(value, str)).all():
                 raise ValueError(f"mixed/non-string object column unsupported: {name}")
             item = {"kind": "string", "values": sorted(series.dropna().unique().tolist())}
         else:
             raise ValueError(f"unsupported input dtype: {name}: {series.dtype}")
-        if missingness is not None:
+        if (
+            pd.api.types.is_numeric_dtype(series.dtype)
+            and not np.isfinite(series.dropna().to_numpy(dtype=float)).all()
+        ):
+            raise ValueError(f"nonfinite numeric input: {name}")
+        if nullable is not None:
+            item.update(nullable=nullable, observed_missing_rate=float(series.isna().mean()))
+        elif missingness is not None:
             item["max_missing_rate"] = limit
         schema.append({"name": str(name), **item})
     return schema
@@ -82,7 +105,12 @@ def coerce_frame(frame, schema, *, enforce_rates=False):
     for item in schema:
         name, kind = item["name"], item["kind"]
         series = out[name]
-        _check_nulls(series, float(item.get("max_missing_rate", 0.0)), enforce_rates)
+        _check_nulls(
+            series,
+            float(item.get("max_missing_rate", 0.0)),
+            enforce_rates,
+            nullable=item.get("nullable"),
+        )
         values = series.dropna()
         if kind in {"category", "string"}:
             allowed = item["categories"] if kind == "category" else item["values"]
