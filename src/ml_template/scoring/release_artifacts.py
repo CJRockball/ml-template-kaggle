@@ -117,9 +117,20 @@ def verify(root, expected_release_id=None):
         "contract.json",
         "feature_recipe.json",
         "runtime.json",
-        "model.ubj",
         "evidence.json",
     }
+    if "predictor.json" in manifest["files"]:
+        from ml_template.models.predictor_selection import required_predictor_files
+
+        descriptor = read_json(root / "predictor.json")
+        required.update(required_predictor_files(descriptor))
+        required.add("predictor.json")
+        for name, expected_hash in descriptor["files_sha256"].items():
+            if manifest["files"].get(name, {}).get("sha256") != expected_hash:
+                raise ValueError(f"predictor descriptor/hash binding mismatch: {name}")
+    else:
+        # Legacy final-model releases retain their original mandatory model file.
+        required.add("model.ubj")
     if not required <= manifest["files"].keys():
         raise ValueError("incomplete release package")
     return manifest

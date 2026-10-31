@@ -2,6 +2,7 @@
 
 No training, calibration fitting, ensemble construction, export or Kaggle submission.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,7 +22,13 @@ def _services():
     from ml_template.evaluation.evaluation_config import EvaluationConfig, load_evaluation_config
     from ml_template.scoring.batch import score_batch
     from ml_template.scoring.prepare_input import main as prepare_input
-    from ml_template.scoring.release_artifacts import read_json, sha256, verify, verify_runtime, write_json
+    from ml_template.scoring.release_artifacts import (
+        read_json,
+        sha256,
+        verify,
+        verify_runtime,
+        write_json,
+    )
     from ml_template.scoring.release_builder import build_release
     from ml_template.scoring.release_config import ReleaseConfig
 
@@ -43,15 +50,25 @@ def _services():
     )
 
 
-def _evaluation_spec(services, engine, run_id, *, evaluation_id=None,
-                     evaluation_config=None, primary_metric=None,
-                     acknowledge_prior_exposure=False, prior_exposure_note="",
-                     no_uncertainty=False):
+def _evaluation_spec(
+    services,
+    engine,
+    run_id,
+    *,
+    evaluation_id=None,
+    evaluation_config=None,
+    primary_metric=None,
+    acknowledge_prior_exposure=False,
+    prior_exposure_note="",
+    no_uncertainty=False,
+):
     if evaluation_id and evaluation_config:
         raise ValueError("supply evaluation_id OR evaluation_config, not both")
     if evaluation_id:
         if primary_metric or acknowledge_prior_exposure or prior_exposure_note or no_uncertainty:
-            raise ValueError("an existing evaluation ID freezes its spec; omit evaluation overrides")
+            raise ValueError(
+                "an existing evaluation ID freezes its spec; omit evaluation overrides"
+            )
         record = services.get_evaluation(engine, evaluation_id)
         if not record or record["status"] != "succeeded" or record["parent_run_id"] != run_id:
             raise ValueError("evaluation ID must identify a successful evaluation of this run")
@@ -75,10 +92,23 @@ def _evaluation_spec(services, engine, run_id, *, evaluation_id=None,
     return services.EvaluationConfig.model_validate(payload)
 
 
-def run_pipeline(engine, *, run_id, input_path, evaluation_spec,
-                 expected_evaluation_id=None, release_dir=None, input_format="raw",
-                 output_root=None, chunk_size=None, batch_definition=None,
-                 check_only=True, acknowledge_research_release=False, services=None):
+def run_pipeline(
+    engine,
+    *,
+    run_id,
+    input_path,
+    evaluation_spec,
+    expected_evaluation_id=None,
+    release_dir=None,
+    input_format="raw",
+    output_root=None,
+    chunk_size=None,
+    batch_definition=None,
+    check_only=True,
+    prep_dir=None,
+    acknowledge_research_release=False,
+    services=None,
+):
     """Return evaluation/release/scoring IDs and paths. Each execution has a fresh folder.
 
     `check_only` checks evaluation eligibility. Without an existing release, downstream
@@ -112,9 +142,12 @@ def run_pipeline(engine, *, run_id, input_path, evaluation_spec,
     if expected_evaluation_id and preflight.get("evaluation_id") != expected_evaluation_id:
         raise ValueError("requested evaluation no longer matches current predictor/data identity")
     report = {
-        "schema_version": 1, "parent_run_id": run_id,
-        "input_path": str(source), "input_sha256": before,
-        "input_format": input_format, "evaluation_ready": ready,
+        "schema_version": 1,
+        "parent_run_id": run_id,
+        "input_path": str(source),
+        "input_sha256": before,
+        "input_format": input_format,
+        "evaluation_ready": ready,
         "evaluation_preflight": preflight,
         "downstream_checks": "deferred_until_release_exists",
         "predictions_computed": False,
@@ -127,10 +160,12 @@ def run_pipeline(engine, *, run_id, input_path, evaluation_spec,
         info = s.read_json(existing / "release.json")
         if not cached or info["evaluation_id"] != preflight.get("evaluation_id"):
             raise ValueError("existing release must match the successful cached evaluation")
-        if (info["parent_run_id"] != run_id or
-                info["calibration_id"] != evaluation_spec.calibration_id or
-                info["release_variant"] != evaluation_spec.release_variant or
-                info["policy"] != evaluation_spec.policy.model_dump(mode="json")):
+        if (
+            info["parent_run_id"] != run_id
+            or info["calibration_id"] != evaluation_spec.calibration_id
+            or info["release_variant"] != evaluation_spec.release_variant
+            or info["policy"] != evaluation_spec.policy.model_dump(mode="json")
+        ):
             raise ValueError("existing release differs from the requested predictor/policy")
         report.update(release_id=manifest["release_id"], release_dir=str(existing))
         _check_input(s, engine, existing, source, input_format, chunk_size, batch_definition)
@@ -138,19 +173,34 @@ def run_pipeline(engine, *, run_id, input_path, evaluation_spec,
     if s.sha256(source) != before:
         raise ValueError("input changed during preflight")
     if check_only:
-        return {**report, "status": "checked", "ready": ready,
-                "pipeline_artifacts_written": False}
+        return {**report, "status": "checked", "ready": ready, "pipeline_artifacts_written": False}
     if not ready:
         raise ValueError("evaluation preflight blocked; review prior exposure and resolved spec")
     if output_root is None:
         from ml_template.paths import ARTIFACTS
+
         output_root = ARTIFACTS / "pipelines"
-    identity = f"pipe_{datetime.now(ZoneInfo('Asia/Singapore')):%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}"
+    if prep_dir is not None:
+        if input_format != "raw":
+            raise ValueError("--prep-dir is only used with raw input")
+
+        prep_dir = Path(prep_dir).expanduser().resolve()
+
+        if prep_dir.exists():
+            raise FileExistsError(f"Prepared-input directory already exists: {prep_dir}")
+    identity = (
+        f"pipe_{datetime.now(ZoneInfo('Asia/Singapore')):%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}"
+    )
     directory = Path(output_root).resolve() / identity
     directory.mkdir(parents=True, exist_ok=False)
-    state = {**report, "pipeline_id": identity, "artifact_dir": str(directory),
-             "status": "running", "stage": "evaluation",
-             "evaluation_spec": evaluation_spec.model_dump(mode="json")}
+    state = {
+        **report,
+        "pipeline_id": identity,
+        "artifact_dir": str(directory),
+        "status": "running",
+        "stage": "evaluation",
+        "evaluation_spec": evaluation_spec.model_dump(mode="json"),
+    }
 
     def checkpoint():
         temporary = directory / "pipeline.json.tmp"
@@ -163,12 +213,13 @@ def run_pipeline(engine, *, run_id, input_path, evaluation_spec,
         if evaluated.get("status") != "succeeded":
             raise ValueError("evaluation did not succeed")
         eid = evaluated["evaluation_id"]
-        state.update(evaluation_id=eid, evaluation_dir=evaluated["artifact_dir"],
-                     stage="release")
+        state.update(evaluation_id=eid, evaluation_dir=evaluated["artifact_dir"], stage="release")
         checkpoint()
         if existing is None:
             request = s.ReleaseConfig(
-                name=f"pipeline_{identity}", evaluation_id=eid, parent_run_id=run_id,
+                name=f"pipeline_{identity}",
+                evaluation_id=eid,
+                parent_run_id=run_id,
                 calibration_id=evaluation_spec.calibration_id,
                 intended_use=evaluation_spec.intended_use,
                 acknowledge_research_release=True,
@@ -186,34 +237,69 @@ def run_pipeline(engine, *, run_id, input_path, evaluation_spec,
         _check_input(s, engine, existing, source, input_format, chunk_size, batch_definition)
         canonical = source
         if input_format == "raw":
-            prepared = directory / "input"
+            prepared = prep_dir if prep_dir is not None else directory / "input"
             with contextlib.redirect_stdout(io.StringIO()):
-                s.prepare_input(["--release", str(existing), "--input", str(source),
-                                 "--output-dir", str(prepared), "--execute"])
+                s.prepare_input(
+                    [
+                        "--release",
+                        str(existing),
+                        "--input",
+                        str(source),
+                        "--output-dir",
+                        str(prepared),
+                        "--execute",
+                    ]
+                )
             canonical = prepared / "data.parquet"
             preparation = s.read_json(prepared / "manifest.json")
             if preparation["input_sha256"] != before:
                 raise ValueError("prepared snapshot differs from the requested input")
         if s.sha256(source) != before:
             raise ValueError("input changed during preparation")
-        state.update(canonical_input=str(canonical), canonical_sha256=s.sha256(canonical),
-                     stage="scoring")
+        state.update(
+            canonical_input=str(canonical), canonical_sha256=s.sha256(canonical), stage="scoring"
+        )
         checkpoint()
-        s.score(engine, existing, canonical, check_only=True, chunk_size=chunk_size,
-                batch_definition=batch_definition)
-        scored = s.score(engine, existing, canonical, check_only=False,
-                         chunk_size=chunk_size, batch_definition=batch_definition,
-                         batch_metadata={"pipeline_id": identity, "parent_run_id": run_id})
+        batch_metadata = {
+            "source_system": "ml_template.scoring.pipeline",
+            "business_batch_id": identity,
+        }
+
+        s.score(
+            engine,
+            existing,
+            canonical,
+            check_only=True,
+            chunk_size=chunk_size,
+            batch_definition=batch_definition,
+            batch_metadata=batch_metadata,
+        )
+
+        scored = s.score(
+            engine,
+            existing,
+            canonical,
+            check_only=False,
+            chunk_size=chunk_size,
+            batch_definition=batch_definition,
+            batch_metadata=batch_metadata,
+        )
         if scored.get("status") != "succeeded":
             raise ValueError("scoring did not succeed")
         predictions = Path(scored["artifact_dir"]) / "predictions.parquet"
         scoring_summary = s.read_json(Path(scored["artifact_dir"]) / "summary.json")
         if scoring_summary["input_sha256"] != state["canonical_sha256"]:
             raise ValueError("scorer snapshot differs from canonical pipeline input")
-        state.update(status="succeeded", stage="complete", predictions_computed=True,
-                     scoring_batch_id=scored["scoring_batch_id"],
-                     scoring_dir=scored["artifact_dir"], predictions_path=str(predictions),
-                     predictions_sha256=s.sha256(predictions), n_rows=scored["n_rows"])
+        state.update(
+            status="succeeded",
+            stage="complete",
+            predictions_computed=True,
+            scoring_batch_id=scored["scoring_batch_id"],
+            scoring_dir=scored["artifact_dir"],
+            predictions_path=str(predictions),
+            predictions_sha256=s.sha256(predictions),
+            n_rows=scored["n_rows"],
+        )
         checkpoint()
         return state
     except Exception as exc:
@@ -227,8 +313,14 @@ def _check_input(s, engine, release, source, input_format, chunk_size, batch_def
         with contextlib.redirect_stdout(io.StringIO()):
             s.prepare_input(["--release", str(release), "--input", str(source), "--check"])
     else:
-        s.score(engine, release, source, check_only=True, chunk_size=chunk_size,
-                batch_definition=batch_definition)
+        s.score(
+            engine,
+            release,
+            source,
+            check_only=True,
+            chunk_size=chunk_size,
+            batch_definition=batch_definition,
+        )
 
 
 def main(argv=None):
@@ -248,26 +340,45 @@ def main(argv=None):
     parser.add_argument("--output-root", type=Path)
     parser.add_argument("--chunk-size", type=int)
     parser.add_argument("--batch-definition")
+    parser.add_argument(
+        "--prep-dir",
+        type=Path,
+        help="Exact prepared-input directory; must not already exist",
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--execute", action="store_true")
     args = parser.parse_args(argv)
     from ml_template.db.connection import get_engine
     from ml_template.tracking.pipeline_logging import setup_logging
+
     setup_logging()
     engine, services = get_engine(), _services()
     spec = _evaluation_spec(
-        services, engine, args.run_id, evaluation_id=args.evaluation_id,
-        evaluation_config=args.evaluation_config, primary_metric=args.primary_metric,
+        services,
+        engine,
+        args.run_id,
+        evaluation_id=args.evaluation_id,
+        evaluation_config=args.evaluation_config,
+        primary_metric=args.primary_metric,
         acknowledge_prior_exposure=args.acknowledge_prior_exposure,
-        prior_exposure_note=args.prior_exposure_note, no_uncertainty=args.no_uncertainty,
+        prior_exposure_note=args.prior_exposure_note,
+        no_uncertainty=args.no_uncertainty,
     )
     result = run_pipeline(
-        engine, run_id=args.run_id, input_path=args.input, evaluation_spec=spec,
-        expected_evaluation_id=args.evaluation_id, release_dir=args.release_dir,
-        input_format=args.input_format, output_root=args.output_root,
-        chunk_size=args.chunk_size, batch_definition=args.batch_definition,
-        check_only=args.check, acknowledge_research_release=args.acknowledge_research_release,
+        engine,
+        run_id=args.run_id,
+        input_path=args.input,
+        evaluation_spec=spec,
+        expected_evaluation_id=args.evaluation_id,
+        release_dir=args.release_dir,
+        input_format=args.input_format,
+        output_root=args.output_root,
+        chunk_size=args.chunk_size,
+        batch_definition=args.batch_definition,
+        check_only=args.check,
+        prep_dir=args.prep_dir,
+        acknowledge_research_release=args.acknowledge_research_release,
         services=services,
     )
     print(json.dumps(result, indent=2, allow_nan=False))

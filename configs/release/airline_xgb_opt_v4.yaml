@@ -1,0 +1,8 @@
+schema_version: 1
+name: kaggle_xgb_basic
+parent_run_id: run_20261031_003236_432315
+evaluation_id: eval_20261031_023533_0f36c489
+calibration_id: null
+intended_use: Work through first run with xgb no preproces data
+acknowledge_research_release: true
+parity_atol: 0.0000001

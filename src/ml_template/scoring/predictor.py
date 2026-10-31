@@ -9,7 +9,9 @@ import pandas as pd
 from ml_template.evaluation.decision_policy import apply_policy, probabilities
 from ml_template.evaluation.evaluation_config import PolicyConfig
 from ml_template.features.feature_recipe import replay_recipe
+from ml_template.models.predictor_selection import load_selected_predictor
 from ml_template.scoring.input_contract import coerce_frame, validate_batch
+from ml_template.scoring.pre_gold_schema import get_preprocessor_schema
 from ml_template.scoring.release_artifacts import inside, read_json, verify, verify_runtime
 
 
@@ -25,19 +27,44 @@ class ReleasedPredictor:
             raise ValueError("unsupported release schema")
         self.contract = read_json(self.directory / "contract.json")
         self.recipe = read_json(self.directory / "feature_recipe.json")
-        if self.contract.get("schema_version") not in {1, 2}:
-            raise ValueError("unsupported scoring contract")
+        self.preprocessor_input_schema = get_preprocessor_schema(self.contract)
         self.policy = PolicyConfig.model_validate(self.info["policy"])
         if [x["name"] for x in self.contract["source_schema"]] != self.recipe["raw_columns"]:
             raise ValueError("source schema differs from recipe")
-        if [x["name"] for x in self.contract["model_schema"]] != self.recipe["columns"]:
+        if [x["name"] for x in self.preprocessor_input_schema] != self.recipe["columns"]:
             raise ValueError("model schema differs from recipe")
-        from ml_template.models.model_factory import load_adapter
         from ml_template.training.run_config import RunConfig
 
         cfg = RunConfig.model_validate(read_json(self.directory / "config.json"))
-        if bool(cfg.fitted_features) != ("model.transformer.joblib" in manifest["files"]):
+        descriptor = (
+            read_json(self.directory / "predictor.json")
+            if "predictor.json" in manifest["files"]
+            else None
+        )
+        if descriptor is None and bool(cfg.fitted_features) != (
+            "model.transformer.joblib" in manifest["files"]
+        ):
             raise ValueError("fitted-transformer presence mismatch")
+        if descriptor is not None:
+            if descriptor["kind"] != self.info.get("predictor_kind", "final"):
+                raise ValueError("release predictor identity differs from packaged descriptor")
+            binding = read_json(self.directory / "evidence.json")
+            evaluated_descriptor = binding.get("provenance", {}).get("predictor")
+            if evaluated_descriptor is not None and evaluated_descriptor != descriptor:
+                raise ValueError("release predictor differs from evaluated member identity")
+            if descriptor["kind"] == "cv_mean" and evaluated_descriptor is None:
+                raise ValueError("fold release lacks fold-average evaluation evidence")
+            evaluated_kind = (
+                binding.get("evaluation_spec", {}).get("predictor", {}).get("kind", "final")
+            )
+            if evaluated_kind != descriptor["kind"]:
+                raise ValueError("release predictor kind differs from evaluated specification")
+            if descriptor["kind"] == "cv_mean" and (
+                self.info["calibration_id"] is not None
+                or self.info["release_variant"] != "raw"
+                or self.policy.kind != "none"
+            ):
+                raise ValueError("cv_mean only supports uncalibrated probabilities with no policy")
         self.calibrator = None
         if self.info["calibration_id"]:
             from ml_template.models.probability_calibrator import ProbabilityCalibrator
@@ -76,11 +103,11 @@ class ReleasedPredictor:
             ):
                 raise ValueError("selected policy artifact hash mismatch")
         # Integrity/runtime verification precedes joblib deserialisation in load_adapter.
-        self.model = load_adapter(cfg, self.directory / "model.ubj")
+        self.model = load_selected_predictor(cfg, self.directory, descriptor)
 
     def _prepare_source_features(self, source):
         """Internal path for already-validated source rows; fitted features stay in adapter."""
-        return coerce_frame(replay_recipe(source, self.recipe), self.contract["model_schema"])
+        return coerce_frame(replay_recipe(source, self.recipe), self.preprocessor_input_schema)
 
     def prepare_features(self, frame):
         """Validate canonical keyed inputs and replay frozen stateless features.

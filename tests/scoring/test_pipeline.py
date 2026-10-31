@@ -1,4 +1,5 @@
 """Orchestration tests with mocked services; no real DB, holdout or model."""
+
 import hashlib
 import json
 from pathlib import Path
@@ -45,15 +46,22 @@ def environment(tmp_path):
         calls.append(("evaluate", check_only))
         if check_only and not options["cached"]:
             return {"ready": options["ready"], "holdout_labels_loaded": False}
-        return {"evaluation_id": "eval_one", "artifact_dir": str(tmp_path / "evaluation"),
-                "status": "succeeded", "cached": options["cached"]}
+        return {
+            "evaluation_id": "eval_one",
+            "artifact_dir": str(tmp_path / "evaluation"),
+            "status": "succeeded",
+            "cached": options["cached"],
+        }
 
     def build_release(engine, request, *, check_only):
         calls.append(("release", check_only))
         folder = tmp_path / "release"
         folder.mkdir(exist_ok=True)
-        return {"ready": True} if check_only else {
-            "status": "succeeded", "release_id": "rel_one", "artifact_dir": str(folder)}
+        return (
+            {"ready": True}
+            if check_only
+            else {"status": "succeeded", "release_id": "rel_one", "artifact_dir": str(folder)}
+        )
 
     def prepare_input(argv):
         calls.append(("prepare", "--check" in argv))
@@ -73,23 +81,37 @@ def environment(tmp_path):
         directory.mkdir(exist_ok=True)
         (directory / "predictions.parquet").write_bytes(b"predictions")
         write_json(directory / "summary.json", {"input_sha256": sha256(canonical)})
-        return {"status": "succeeded", "artifact_dir": str(directory),
-                "scoring_batch_id": "score_one", "n_rows": 1}
+        return {
+            "status": "succeeded",
+            "artifact_dir": str(directory),
+            "scoring_batch_id": "score_one",
+            "n_rows": 1,
+        }
 
     s = SimpleNamespace(
-        get_run=lambda engine, run: {"status": "succeeded"}, evaluate=evaluate,
-        build_release=build_release, ReleaseConfig=lambda **kwargs: SimpleNamespace(**kwargs),
-        prepare_input=prepare_input, score=score, sha256=sha256,
-        write_json=write_json, read_json=lambda path: json.loads(Path(path).read_text()),
+        get_run=lambda engine, run: {"status": "succeeded"},
+        evaluate=evaluate,
+        build_release=build_release,
+        ReleaseConfig=lambda **kwargs: SimpleNamespace(**kwargs),
+        prepare_input=prepare_input,
+        score=score,
+        sha256=sha256,
+        write_json=write_json,
+        read_json=lambda path: json.loads(Path(path).read_text()),
     )
-    return SimpleNamespace(source=source, s=s, calls=calls, options=options,
-                           output=tmp_path / "pipelines", spec=Spec())
+    return SimpleNamespace(
+        source=source, s=s, calls=calls, options=options, output=tmp_path / "pipelines", spec=Spec()
+    )
 
 
 def run(env, **kwargs):
-    options = {"run_id": "run_one", "input_path": env.source,
-               "evaluation_spec": env.spec, "output_root": env.output,
-               "services": env.s}
+    options = {
+        "run_id": "run_one",
+        "input_path": env.source,
+        "evaluation_spec": env.spec,
+        "output_root": env.output,
+        "services": env.s,
+    }
     options.update(kwargs)
     return run_pipeline(object(), **options)
 
@@ -105,8 +127,14 @@ def test_preflight_never_executes_or_writes_pipeline(environment):
 def test_full_raw_pipeline_and_returned_path(environment):
     result = run(environment, check_only=False, acknowledge_research_release=True)
     assert environment.calls == [
-        ("evaluate", True), ("evaluate", False), ("release", True), ("release", False),
-        ("prepare", True), ("prepare", False), ("score", True), ("score", False),
+        ("evaluate", True),
+        ("evaluate", False),
+        ("release", True),
+        ("release", False),
+        ("prepare", True),
+        ("prepare", False),
+        ("score", True),
+        ("score", False),
     ]
     assert result["status"] == "succeeded"
     assert result["evaluation_id"] == "eval_one"
@@ -159,8 +187,9 @@ def test_failed_scoring_is_checkpointed(environment):
 
 
 def test_canonical_input_skips_preparation(environment):
-    result = run(environment, check_only=False, acknowledge_research_release=True,
-                 input_format="canonical")
+    result = run(
+        environment, check_only=False, acknowledge_research_release=True, input_format="canonical"
+    )
     assert result["canonical_input"] == str(environment.source.resolve())
     assert not any(stage == "prepare" for stage, _ in environment.calls)
 
@@ -183,11 +212,13 @@ def test_parent_mismatch_rejected(environment):
 
 def test_input_change_after_evaluation_stops(environment):
     original = environment.s.build_release
+
     def build(engine, request, *, check_only):
         result = original(engine, request, check_only=check_only)
         if not check_only:
             environment.source.write_text("id,x\n1,999\n")
         return result
+
     environment.s.build_release = build
     with pytest.raises(ValueError, match="input changed"):
         run(environment, check_only=False, acknowledge_research_release=True)
@@ -197,8 +228,13 @@ def test_input_change_after_evaluation_stops(environment):
 def existing_release(env, *, parent="run_one", eid="eval_one"):
     folder = env.source.parent / "existing_release"
     folder.mkdir()
-    info = {"parent_run_id": parent, "evaluation_id": eid, "calibration_id": None,
-            "release_variant": "raw", "policy": {"kind": "none"}}
+    info = {
+        "parent_run_id": parent,
+        "evaluation_id": eid,
+        "calibration_id": None,
+        "release_variant": "raw",
+        "policy": {"kind": "none"},
+    }
     (folder / "release.json").write_text(json.dumps(info))
     (folder / "runtime.json").write_text("{}")
     env.s.verify = lambda path: {"release_id": "rel_existing"}
@@ -209,8 +245,9 @@ def existing_release(env, *, parent="run_one", eid="eval_one"):
 
 def test_explicit_existing_release_reused(environment):
     folder = existing_release(environment)
-    result = run(environment, release_dir=folder, check_only=False,
-                 acknowledge_research_release=True)
+    result = run(
+        environment, release_dir=folder, check_only=False, acknowledge_research_release=True
+    )
     assert result["release_id"] == "rel_existing"
     assert not any(stage == "release" for stage, _ in environment.calls)
 
@@ -225,3 +262,26 @@ def test_wrong_release_evaluation_rejected(environment):
     folder = existing_release(environment, eid="another_eval")
     with pytest.raises(ValueError, match="cached evaluation"):
         run(environment, release_dir=folder)
+
+
+def test_pipeline_metadata_matches_real_schema(environment):
+    from ml_template.monitoring.scoring_attempts import parse_metadata
+
+    original = environment.s.score
+    captured = []
+
+    def strict_score(*args, **kwargs):
+        captured.append(parse_metadata(kwargs.get("batch_metadata")))
+        return original(*args, **kwargs)
+
+    environment.s.score = strict_score
+
+    result = run(
+        environment,
+        check_only=False,
+        acknowledge_research_release=True,
+    )
+
+    assert len(captured) == 2
+    assert captured[0] == captured[1]
+    assert captured[0]["business_batch_id"] == result["pipeline_id"]

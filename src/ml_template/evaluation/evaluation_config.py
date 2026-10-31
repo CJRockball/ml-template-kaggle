@@ -9,6 +9,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ml_template.evaluation.predictor_config import PredictorConfig
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
@@ -97,9 +99,18 @@ class EvaluationConfig(StrictModel):
     acknowledge_prior_exposure: bool = False
     prior_exposure_note: str = ""
     supersedes_evaluation_id: str | None = None
+    predictor: PredictorConfig = Field(default_factory=PredictorConfig)
 
     @model_validator(mode="after")
     def check(self):
+        if self.predictor.kind == "cv_mean" and (
+            self.calibration_id is not None
+            or self.release_variant != "raw"
+            or self.policy.kind != "none"
+        ):
+            raise ValueError(
+                "cv_mean initially supports raw probabilities with no calibrator or decision policy"
+            )
         if self.release_variant == "calibrated" and not self.calibration_id:
             raise ValueError("calibrated release requires calibration_id")
         ref = self.policy.selection

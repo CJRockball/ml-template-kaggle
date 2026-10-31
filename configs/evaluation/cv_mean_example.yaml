@@ -1,0 +1,20 @@
+schema_version: 1
+parent_run_id: run_20261031_003236_432315
+predictor:
+  kind: cv_mean
+  weighting: equal
+calibration_id: null
+release_variant: raw
+primary_metric: roc_auc
+policy:
+  kind: none
+uncertainty:
+  enabled: false
+intended_use: Frozen equal-weight CV-fold mean for research and Kaggle scoring
+acknowledge_prior_exposure: true
+prior_exposure_note: >-
+  This Silver dataset's holdout was previously accessed in model evaluations,
+  including eval_20261026_235015_f01ef8a9. This is an acknowledged repeated
+  assessment of the frozen CV-fold mean, not an untouched first confirmation.
+  Fold membership and equal weights are fixed before this evaluation.
+supersedes_evaluation_id: null
