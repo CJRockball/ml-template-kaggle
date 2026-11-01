@@ -102,7 +102,7 @@ def cross_validate(
         hit_cap = best_round >= stopper.max_rounds
         if hit_cap:
             logger.warning(
-                "fold %d: early stopping never triggered (%d rounds); raise n_estimators",
+                "fold %d: selected round/epoch reached the cap (%d); consider increasing the model training cap",
                 k,
                 best_round,
             )

@@ -1,0 +1,36 @@
+type: nn
+params:
+  architecture: mlp
+  task: binary_classification
+  device: cuda #cpu
+  inference_device: cuda #cpu
+  deterministic: true
+  cpu_threads: 1
+  hidden_dims: [256, 128, 64]
+  dropout: 0.1
+  embedding_dropout: 0.1
+  embedding_max_dim: 20
+  numeric_projection_multiplier: 4
+  normalization: layernorm
+  max_epochs: 100
+  patience: 5
+  min_delta: 0.0
+  monitor: logloss
+  batch_size: 1024
+  prediction_batch_size: 4096
+  learning_rate: 0.0001
+  weight_decay: 0.000001
+  optimizer: adam
+  scheduler: none
+  gradient_clip_norm: null
+  pos_weight: 1.0
+  preprocessing:
+    # null/null infer category/string columns as cats, remainder as nums.
+    # Use an explicit list for integer-coded categories; [] disables a source branch.
+    numeric: null
+    categorical: null
+    numeric_strategy: median
+    scaling: standard
+    constant_fill: 0.0
+    all_missing_fill: 0.0
+    unknown_policy: reserved

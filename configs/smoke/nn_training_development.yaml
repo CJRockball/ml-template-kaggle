@@ -1,0 +1,13 @@
+source: experiment
+experiment: configs/experiment/nn_mlp_example.yaml
+sample_rows: 4096
+seed: 42
+validation_fraction: 0.25
+timeout_seconds: 120
+overrides:
+  device: cpu
+  inference_device: cpu
+  max_epochs: 3
+  patience: 2
+  hidden_dims: [32, 16]
+  batch_size: 256

@@ -49,13 +49,16 @@ dependencies = [
     "plotly>=6,<7",
     "dash-ag-grid>=33",
     "pyyaml>=6.0.3",
-    "lightgbm>=4.7"
+    "torch==2.9.1+cu126",
+
 ]
  
 # Optional model libraries. Install with: uv sync --extra lgbm --extra catboost
 [project.optional-dependencies]
+nn = ["torch>=2.6,<3"]
 lgbm = ["lightgbm>=4.3"]
 catboost = ["catboost>=1.2"]
+
 
 # Dependency groups = DEVELOPER-only tooling, never published (PEP 735).
 # Install: uv pip install --group dev   (or: uv pip install -e . --group dev)
@@ -67,7 +70,7 @@ dev = [
 ]
  
 [project.urls]
-Repository = "https://github.com/CJRockball/tabular-ml-template"
+Repository = "https://github.com/CJRockball/ml-template-kaggle"
 
 # Proper src layout: modules live in src/ml_template/, so the installed
 # package is `ml_template` (not `src`).
@@ -96,3 +99,11 @@ markers = [
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true   # xgboost/shap ship incomplete stubs
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
