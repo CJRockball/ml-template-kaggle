@@ -1,0 +1,9 @@
+# Standalone preprocessing smoke schema, NOT an experiment or sweep schema.
+# Paths are relative to the repository root; run from that root.
+preprocessor: configs/preprocessing/nn_preprocessing_example.yaml
+source:
+  kind: synthetic
+  rows: 128
+sample_rows: 128
+seed: 42
+validation_fraction: 0.25

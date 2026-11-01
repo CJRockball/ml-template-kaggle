@@ -1,0 +1,9 @@
+schema_version: 1
+name: nn_mlp_research_v1
+parent_run_id: REPLACE_NN_RUN_ID
+evaluation_id: REPLACE_SUCCESSFUL_EVALUATION_ID
+calibration_id: null
+intended_use: Offline research scoring only
+acknowledge_research_release: true
+# NN-specific float32 roundoff tolerance; global release defaults stay unchanged.
+parity_atol: 0.000001

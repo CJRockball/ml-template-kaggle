@@ -78,7 +78,8 @@ def _evidence(engine, request):
     now_code = runtime_info()["code_sha256"]
     for name, expected in old.get("code_hashes", {}).items():
         if (
-            name.startswith(("features/", "models/")) or name == "training/run_config.py"
+            name.startswith(("features/", "models/", "preprocessing/"))
+            or name == "training/run_config.py"
         ) and now_code.get(name) != expected:
             raise ValueError(f"evaluated prediction implementation changed: {name}")
     evaluated_predictor = old.get("predictor")
@@ -218,7 +219,20 @@ def _check_parity(predictor, material, atol):
             diff = float(np.max(np.abs(values - got[column].to_numpy())))
             errors[column] = diff
             if diff > atol or not np.allclose(got[column], chunked[column], rtol=0, atol=atol):
-                raise ValueError(f"prediction parity failed: {column}: {diff}")
+                chunk_diff = float(
+                    np.max(
+                        np.abs(
+                            got[column].to_numpy(dtype=float)
+                            - chunked[column].to_numpy(dtype=float)
+                        )
+                    )
+                )
+                raise ValueError(
+                    f"prediction parity failed: {column}; "
+                    f"reference_max_abs={diff:.9g}; "
+                    f"chunk_shuffle_max_abs={chunk_diff:.9g}; "
+                    f"atol={atol:.9g}"
+                )
     whole = predictor.predict(batch, include_policy=False)
     single = predictor.predict(batch.iloc[:1], include_policy=False)
     if abs(single.p_release.iloc[0] - whole.p_release.iloc[0]) > atol:

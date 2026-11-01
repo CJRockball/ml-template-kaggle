@@ -62,6 +62,10 @@ def _adapter_class(model_type: str) -> type:
         from ml_template.models.catboost_classifier import CatBoostAdapter
 
         return CatBoostAdapter
+    if model_type == "nn":
+        from ml_template.models.nn_classifier import NNAdapter
+
+        return NNAdapter
     raise ValueError(f"unknown model type {model_type!r}")
 
 

@@ -177,6 +177,7 @@ def prepare_evaluation(engine, spec, *, silver_root=None, split_root=None, featu
         "scikit-learn",
         "scipy",
         "xgboost",
+        "torch",
         "pyarrow",
         "pydantic",
         "sqlalchemy",
@@ -191,7 +192,16 @@ def prepare_evaluation(engine, spec, *, silver_root=None, split_root=None, featu
     package_root = Path(__file__).resolve().parents[1]
     code_hashes = {
         str(p.relative_to(package_root)): a.sha256_file(p)
-        for folder in ["evaluation", "models", "training", "features", "data", "tracking", "db"]
+        for folder in [
+            "evaluation",
+            "models",
+            "training",
+            "features",
+            "preprocessing",
+            "data",
+            "tracking",
+            "db",
+        ]
         for p in sorted((package_root / folder).rglob("*.py"))
     }
     # The mutable first-access timestamp is audit context, not predictor identity.

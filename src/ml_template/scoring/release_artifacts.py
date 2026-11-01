@@ -12,6 +12,7 @@ PACKAGES = (
     "scipy",
     "scikit-learn",
     "xgboost",
+    "torch",
     "pyarrow",
     "pydantic",
     "joblib",

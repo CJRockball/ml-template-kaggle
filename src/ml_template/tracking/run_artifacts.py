@@ -23,6 +23,7 @@ TRACKED_PACKAGES = (
     "pandas",
     "scikit-learn",
     "xgboost",
+    "torch",
     "pyarrow",
     "pydantic",
     "sqlalchemy",

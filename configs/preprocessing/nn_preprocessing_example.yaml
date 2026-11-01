@@ -1,0 +1,9 @@
+# Dedicated preprocessing config: explicit feature-only columns after fitted FE.
+# Replace these example names with your actual resolved input columns.
+numeric: [measurement, delay]
+categorical: [category, rating]
+numeric_strategy: median
+scaling: standard
+constant_fill: 0.0
+all_missing_fill: 0.0
+unknown_policy: reserved

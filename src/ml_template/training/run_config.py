@@ -31,6 +31,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ml_template.evaluation.metrics import resolved_keys, with_standard
+from ml_template.models.nn.params import NNModelConfig
 from ml_template.paths import ROOT
 
 SCHEMA_VERSION = 2
@@ -173,7 +174,8 @@ class CatBoostModelConfig(_Strict):
 
 
 ModelConfig = Annotated[
-    XGBModelConfig | LGBMModelConfig | CatBoostModelConfig, Field(discriminator="type")
+    XGBModelConfig | LGBMModelConfig | CatBoostModelConfig | NNModelConfig,
+    Field(discriminator="type"),
 ]
 
 
