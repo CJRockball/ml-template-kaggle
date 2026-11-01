@@ -208,14 +208,32 @@ def test_fitted_wrapper_composition(tmp_path):
     np.testing.assert_allclose(a.predict_proba(X), b.predict_proba(X), rtol=0, atol=1e-6)
 
 
-def test_actual_training_smoke():
+def test_actual_training_smoke(tmp_path):
     from ml_template.training.nn_smoke import SmokeConfig, run_smoke
+
+    # Independent of the user's editable model configuration.
+    model_file = tmp_path / "nn_model.yaml"
+    model_file.write_text(
+        "type: nn\nparams: {}\n",
+        encoding="utf-8",
+    )
 
     report = run_smoke(
         SmokeConfig(
-            model_file="configs/model/nn_mlp.yaml",
+            model_file=str(model_file),
             sample_rows=32,
-            overrides={"max_epochs": 2, "patience": 1, "hidden_dims": [8], "batch_size": 7},
+            overrides={
+                "device": "cpu",
+                "inference_device": "cpu",
+                "max_epochs": 2,
+                "patience": 1,
+                "hidden_dims": [8],
+                "batch_size": 7,
+            },
         )
     )
-    assert report["status"] == "passed" and report["holdout_labels_loaded"] is False
+
+    assert report["status"] == "passed"
+    assert report["training_device"] == "cpu"
+    assert report["inference_device"] == "cpu"
+    assert report["holdout_labels_loaded"] is False

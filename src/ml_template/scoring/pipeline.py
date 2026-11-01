@@ -223,9 +223,7 @@ def run_pipeline(
                 calibration_id=evaluation_spec.calibration_id,
                 intended_use=evaluation_spec.intended_use,
                 acknowledge_research_release=True,
-                parity_atol=(
-                    1e-6 if parent.get("model_type") == "nn" else 1e-7
-                ),
+                parity_atol=(1e-6 if parent.get("model_type") == "nn" else 1e-7),
             )
             s.build_release(engine, request, check_only=True)
             released = s.build_release(engine, request, check_only=False)
