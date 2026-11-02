@@ -49,13 +49,12 @@ dependencies = [
     "plotly>=6,<7",
     "dash-ag-grid>=33",
     "pyyaml>=6.0.3",
-    "torch==2.9.1+cu126",
 
 ]
  
 # Optional model libraries. Install with: uv sync --extra lgbm --extra catboost
 [project.optional-dependencies]
-nn = ["torch>=2.6,<3"]
+pytorch = ["torch==2.9.1+cu126"]
 lgbm = ["lightgbm>=4.3"]
 catboost = ["catboost>=1.2"]
 
